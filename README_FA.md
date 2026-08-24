@@ -249,3 +249,5 @@ Best Bid فقط برای عملیات واقعی فروش/Rotation نگه داش
 - `app/providers/ime_adapter.py`
 - `app/collector.py`
 - `config/instruments.yaml`
+
+Git workflow test
