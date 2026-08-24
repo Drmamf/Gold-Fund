@@ -19,3 +19,5 @@ services:
 
 volumes:
   wallex_gold_pgdata:
+    external: true
+    name: wallex_gold_project_complete_wallex_gold_pgdata
