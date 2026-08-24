@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wallex-gold-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wallex_gold
+      POSTGRES_USER: wallex_gold
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - wallex_gold_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallex_gold -d wallex_gold"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wallex_gold_pgdata:

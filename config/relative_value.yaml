@@ -1,0 +1,36 @@
+relative_value:
+  anchor_symbol: "عیار"
+
+  # Historical baseline is intentionally kept outside Python.
+  # These are Ayyar-minus-fund normal gaps in percentage points.
+  # In the legacy model the intrinsic bubble was common across funds,
+  # so the common intrinsic component cancelled in the cross-fund gap.
+  historical_baseline:
+    methodology: "ayyar_minus_fund_normal_gap"
+    calibrated_through: "2026-07-07"
+    observations: 252
+    normal_gap_pct_points:
+      عیار: 0.000000
+      کهربا: 0.895296
+      مثقال: 0.926440
+      گوهر: 1.039804
+      گنج: 1.306113
+      آلتون: 1.102191
+      زر: 2.131982
+      لیان: 1.362867
+      رز ترنج: 1.309263
+      زروان: 1.264320
+
+  execution_costs:
+    # Canonical decimal fee rates, not percentage points:
+    # 0.00125 = 0.125%
+    sell_fee_rate: 0.00125
+    buy_fee_rate: 0.00125
+
+  market_quality:
+    require_valid_market_snapshot: true
+    require_positive_trade_activity: true
+    require_two_sided_order_book: true
+
+  diagnostics:
+    keep_pairwise_candidates: true

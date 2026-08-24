@@ -1,0 +1,32 @@
+app:
+  timezone: Asia/Tehran
+schedule:
+  working_weekdays:
+  - Saturday
+  - Sunday
+  - Monday
+  - Tuesday
+  - Wednesday
+  open_status_time: '12:00'
+  warmup_time: '12:03'
+  active_start: '12:05'
+  cycle_seconds: 180
+  active_end: '18:00'
+  close_snapshot_enabled: true
+  close_snapshot_time: '18:00'
+weekly_backup:
+  weekday: Wednesday
+  time: '18:30'
+  format: zip_of_csv_tables
+notifications:
+  channel: BALE
+  api_error_alert_each_failed_cycle: true
+  signal_only_during_day: true
+  send_execution_messages: false
+database:
+  daily_summary_upsert_each_cycle: true
+  keep_raw_payloads: true
+paths:
+  asset_composition: ./config/fund_asset_composition_gold_normalized.csv
+  asset_report_schedule: ./config/fund_asset_composition_report_schedule.yaml
+  export_dir: ./output/exports

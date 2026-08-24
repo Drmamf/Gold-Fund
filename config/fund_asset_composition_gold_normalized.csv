@@ -1,0 +1,11 @@
+﻿symbol,legal_fund_name,as_of_date_jalali,original_bullion_weight,original_coin_weight,gold_basis_total,normalized_bullion_weight,normalized_coin_weight,source_file,normalization_rule
+عیار,صندوق سرمایه‌گذاری عیار مفید,1405/06/02,0.8726,0.1249,0.9975,0.8747869674185463659147869674,0.1252130325814536340852130326,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+کهربا,صندوق سرمایه گذاری مبتنی برکالای کهربا,1405/06/02,0.8415,0.1518,0.9933,0.8471760797342192691029900332,0.1528239202657807308970099668,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+مثقال,صندوق سرمایه گذاری در اوراق بهادار مبتنی بر طلای زرین آگاه,1405/06/02,0.934,0.0557,0.9897,0.9437203192886733353541477215,0.05627968071132666464585227847,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+گوهر,صندوق سرمایه‌گذاری مبتنی بر کالای کیان,1405/06/02,0.9107,0.077,0.9877,0.9220411055988660524450744153,0.07795889440113394755492558469,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+گنج,صندوق سرمایه گذاری سیمای کاردان,1405/06/02,0.9999,0,0.9999,1,0,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+آلتون,صندوق سرمایه گذاری در اوراق بهادار مبتنی بر کالای آسمان,1405/06/02,0.9332,0.0593,0.9925,0.9402518891687657430730478589,0.05974811083123425692695214106,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+زر,صندوق سرمایه‌گذاری امید ثروت ایرانیان,1405/06/02,0.8292,0.169,0.9982,0.8306952514526147064716489681,0.1693047485473852935283510319,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+لیان,صندوق سرمایه گذاری دیبای معیار,1405/06/02,0.9856,0,0.9856,1,0,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+رز ترنج,صندوق سرمایه گذاری در اوراق بهادار مبتنی بر طلای رز,1405/06/02,0.8838,0.0789,0.9627,0.9180430040511062636335306949,0.08195699594889373636646930508,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)
+زروان,صندوق سرمایه گذاری در اوراق بهادار کالایی ویستا,1405/06/02,0.9535,0.0464,0.9999,0.9535953595359535953595359536,0.0464046404640464046404640464,https://talagram.org/box-assets,bullion/(bullion+coin); coin/(bullion+coin)

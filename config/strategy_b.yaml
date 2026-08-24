@@ -1,0 +1,59 @@
+strategy_id: "THRESHOLD_10_10_RELATIVE"
+
+account:
+  initial_capital_irr: 1000000000
+
+entry:
+  # Every normal staged entry is 10% of CURRENT portfolio value.
+  threshold_entry_pct: 10.0
+  buy_rearm_margin_pct_points: 1.50
+  min_entry_cash_irr: 1000000
+
+  # The MA7 rule is ONLY an escape hatch for Entry #2 when Entry #1 has
+  # not achieved its +1.50pp rearm. It can never create Entry #3 or later.
+  ma7_fallback_second_entry:
+    enabled: true
+    entry_pct: 10.0
+    only_entry_number: 2
+    require_later_trading_day: true
+    lookback_complete_trading_days: 7
+    condition: "current_10fund_cumulative_trade_value_gt_mean_previous_7_complete_trading_days"
+    target_selection: "lowest_total_bubble_with_account_capacity"
+
+risk:
+  max_total_gold_exposure_pct: 100.0
+  max_per_fund_exposure_pct: 30.0
+  allow_partial_entry: false
+
+cash_parking:
+  enabled: true
+  symbol: "آفران"
+  buy_fee_rate: 0.00075
+  sell_fee_rate: 0.00075
+  unit_step: 1
+  min_sweep_cash_irr: 1000000
+  keep_cash_buffer_irr: 0
+
+execution:
+  unit_step: 1
+  sell_at: "best_bid"
+  buy_at: "best_ask"
+
+thresholds_pct:
+  عیار: {buy: -1.10, sell: 2.80}
+  کهربا: {buy: -1.80, sell: 2.10}
+  مثقال: {buy: -1.75, sell: 2.00}
+  گوهر: {buy: -1.75, sell: 2.00}
+  گنج: {buy: -2.15, sell: 2.80}
+  آلتون: {buy: -2.00, sell: 2.20}
+  زر: {buy: -3.00, sell: 1.70}
+  لیان: {buy: -3.00, sell: 1.65}
+  رز ترنج: {buy: -2.85, sell: 1.15}
+  زروان: {buy: -2.80, sell: 1.60}
+
+relative_overlay:
+  enabled: true
+  allow_direct_fund_to_fund: true
+  min_net_executable_edge_pct_points: 0.50
+  respect_per_fund_cap: true
+  if_target_cap_blocks_full_rotation: "try_next_best_target"

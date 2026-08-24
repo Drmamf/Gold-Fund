@@ -1,0 +1,24 @@
+strategy_id: "RELATIVE_BUY_HOLD"
+
+anchor_symbol: "عیار"
+single_holding_only: true
+
+account:
+  initial_capital_irr: 1000000000
+  initial_allocation_pct: 100.0
+
+relative_rotation:
+  enabled: true
+  allow_direct_fund_to_fund: true
+  min_net_executable_edge_pct_points: 0.50
+
+execution:
+  sell_at: "best_bid"
+  buy_at: "best_ask"
+  mark_price: "best_bid_liquidation_else_best_ask"
+  unit_step: 1
+  allow_cash_remainder: true
+
+# Fees are intentionally NOT duplicated here.
+# Strategy A executor reads the same buy/sell fee rates used by the
+# shared Relative Value engine from config/relative_value.yaml.

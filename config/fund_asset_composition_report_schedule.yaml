@@ -1,0 +1,63 @@
+asset_composition_report_schedule:
+  timezone: Asia/Tehran
+  calendar: jalali
+  policy:
+    reminder_start_offset_days: 5
+    repeat_every_days_until_updated: 1
+    stop_condition: asset_composition_as_of >= expected_report_period_end
+    note: Publication dates may vary month to month. The bot should start checking
+      after the fund-specific report period end and keep reminding until the asset-composition
+      record is updated.
+    disabled_reason: Superseded by daily Talagram composition updater at 12:00 Tehran
+  funds: {}
+  legacy_funds:
+    عیار:
+      symbol: عیار
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: DownloadPDFByAttachmentId.xlsx
+    کهربا:
+      symbol: کهربا
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: پرتفوی کهربا 1405.04.31.xlsx
+    مثقال:
+      symbol: مثقال
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: صورت وضعیت پرتفوی- مثقال- تیرماه.xlsx
+    گوهر:
+      symbol: گوهر
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: گزارش پرتفوی طلا نهایی منتهی به 1405.04.31.xlsx
+    گنج:
+      symbol: گنج
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: 4.xlsx
+    آلتون:
+      symbol: آلتون
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: نهایی پورتفوی تیر ماه 1405 صندوق آلتون.xlsx
+    زر:
+      symbol: زر
+      report_period_end_rule: jalali_day_of_month:14
+      current_uploaded_report_period_end: 1405/04/14
+      source_file: پرتفوی 14تیرماه.xlsx
+    لیان:
+      symbol: لیان
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: صورت وضعیت گزارش پرتفوی صندوق سرمایه گذاری کالایی
+    رز ترنج:
+      symbol: رز ترنج
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: kalaye toranj 14050431.xlsx
+    زروان:
+      symbol: زروان
+      report_period_end_rule: jalali_month_end
+      current_uploaded_report_period_end: 1405/04/31
+      source_file: زروان منتهی به 1405.04.31.xlsx

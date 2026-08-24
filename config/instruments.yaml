@@ -1,0 +1,110 @@
+instruments:
+  - symbol: "عیار"
+    legal_name: "صندوق سرمایه‌گذاری عیار مفید"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: true
+    tsetmc:
+      ins_code: "34144395039913458"
+      isin: "IRTKMOFD0006"
+      requires_nav_redemption: true
+
+  - symbol: "کهربا"
+    legal_name: "صندوق سرمایه گذاری مبتنی برکالای کهربا"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "25559236668122210"
+      isin: "IRTKROBA0008"
+      requires_nav_redemption: true
+
+  - symbol: "مثقال"
+    legal_name: "صندوق سرمایه گذاری در اوراق بهادار مبتنی بر طلای زرین آگاه"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "32469128621155736"
+      isin: "IRTKZARA0006"
+      requires_nav_redemption: true
+
+  - symbol: "گوهر"
+    legal_name: "صندوق سرمایه‌گذاری مبتنی بر کالای کیان"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "12390706505809150"
+      isin: "IRTKKIAN0009"
+      requires_nav_redemption: true
+
+  - symbol: "گنج"
+    legal_name: "صندوق سرمایه گذاری سیمای کاردان"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "58514988269776425"
+      isin: "IRTKGANJ0004"
+      requires_nav_redemption: true
+
+  - symbol: "آلتون"
+    legal_name: "صندوق سرمایه گذاری در اوراق بهادار مبتنی بر کالای آسمان"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "28374437855144739"
+      isin: "IRTKALTN0005"
+      requires_nav_redemption: true
+
+  - symbol: "زر"
+    legal_name: "صندوق سرمایه‌گذاری امید ثروت ایرانیان"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "33254899395816171"
+      isin: "IRTKZARF0001"
+      requires_nav_redemption: true
+
+  - symbol: "لیان"
+    legal_name: "صندوق سرمایه گذاری دیبای معیار"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "6362118829011821"
+      isin: "IRTKLIAN0008"
+      requires_nav_redemption: true
+
+  - symbol: "رز ترنج"
+    legal_name: "صندوق سرمایه گذاری در اوراق بهادار مبتنی بر طلای رز"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "20244389840999638"
+      isin: "IRTKROSE0005"
+      requires_nav_redemption: true
+
+  - symbol: "زروان"
+    legal_name: "صندوق سرمایه گذاری در اوراق بهادار کالایی ویستا"
+    instrument_type: "GOLD_FUND"
+    is_gold_fund: true
+    is_anchor: false
+    tsetmc:
+      ins_code: "28255729477187163"
+      isin: "IRTKZARV0001"
+      requires_nav_redemption: true
+
+  - symbol: "آفران"
+    legal_name: "صندوق درآمد ثابت آفران"
+    instrument_type: "FIXED_INCOME_FUND"
+    is_gold_fund: false
+    is_anchor: false
+    tsetmc:
+      ins_code: "3846143218462419"
+      isin: null
+      requires_nav_redemption: false

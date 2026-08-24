@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Wallex Gold Talagram composition updater daily at 12:00 Tehran
+
+[Timer]
+OnCalendar=*-*-* 12:00:00 Asia/Tehran
+Persistent=true
+AccuracySec=1s
+RandomizedDelaySec=0
+Unit=wallex-gold-composition-update.service
+
+[Install]
+WantedBy=timers.target

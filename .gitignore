@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+logs/
+output/
+runtime_state/
+.DS_Store
+
+*.bak*
+
+*.before_*

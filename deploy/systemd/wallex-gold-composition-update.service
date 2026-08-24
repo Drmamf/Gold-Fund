@@ -1,0 +1,17 @@
+[Unit]
+Description=Wallex Gold - Daily Talagram Asset Composition Update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/wallex-gold/wallex_gold_project_COMPLETE
+EnvironmentFile=/opt/wallex-gold/wallex_gold_project_COMPLETE/.env
+ExecStart=/opt/wallex-gold/wallex_gold_project_COMPLETE/.venv/bin/python scripts/update_talagram_asset_composition.py --apply --notify-success
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

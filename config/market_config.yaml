@@ -1,0 +1,76 @@
+data_sources:
+  tgju:
+    enabled: true
+    endpoint: "https://call2.tgju.org/ajax.json"
+    usd:
+      key: "price_dollar_rl"
+      price_field: "p"
+      timestamp_field: "ts"
+      canonical_unit: "IRR_PER_USD"
+      max_age_seconds: 21600
+    gold_ounce:
+      key: "ons"
+      price_field: "p"
+      timestamp_field: "ts"
+      canonical_unit: "USD_PER_TROY_OUNCE"
+      # During live global trading, ounce must update within 15 minutes.
+      max_age_seconds: 900
+
+      # Iranian gold funds trade on Saturday/Sunday while the conventional
+      # global gold session is closed. On those days the latest Friday close
+      # is an expected reference, not an API failure.
+      closed_market_max_age_seconds: 259200  # 72 hours
+      carry_forward_weekdays:
+        - "Saturday"
+        - "Sunday"
+
+      # Optional explicit global-holiday exceptions (YYYY-MM-DD).
+      # Add a date here only when a known global closure requires it.
+      carry_forward_dates: []
+
+  tsetmc:
+    enabled: true
+    price_url: "https://cdn.tsetmc.com/api/ClosingPrice/GetClosingPriceInfo/{ins_code}"
+    nav_url: "https://cdn.tsetmc.com/api/Fund/GetETFByInsCode/{ins_code}"
+    order_book_url: "https://cdn.tsetmc.com/api/BestLimits/{ins_code}"
+    request_sleep_seconds: 0.12
+
+  ime:
+    enabled: true
+    live_market_url: "https://dataapi.ime.co.ir/api/CDC/CDCLiveMarket"
+    bullion_contract_code: "GoldBar"
+    coin_contract_code: "GoldCoin"
+
+network:
+  timeout_seconds: 15
+  retries: 3
+  retry_backoff_seconds: 1.2
+
+market_data_policy:
+  # STRICT: price used by valuation/signals must be executable to BUY now.
+  fund_valuation_price_source: "BEST_ASK_ONLY"
+  ime_valuation_price_source: "BEST_ASK_ONLY"
+
+  # No last-price, closing-price, midpoint, or settlement fallback is valid.
+  allow_price_fallback: false
+
+  # Gold-fund NAV is valid only from TSETMC ETF redemption NAV (pRedTran).
+  nav_source: "TSETMC_REDEMPTION_ONLY"
+  allow_nav_fallback: false
+
+  # Threshold/valuation signal eligibility needs current buy-side executable
+  # quote + NAV + positive current-day trading activity.
+  require_best_ask_for_valuation: true
+  require_positive_trade_activity: true
+
+  # Selling/rotation execution is a separate concern and requires Best Bid.
+  require_best_bid_for_sell_execution: true
+
+  fail_closed_on_invalid_valuation_inputs: true
+  keep_raw_source_payload: true
+
+valuation:
+  troy_ounce_grams: 31.1034768
+  bullion_certificate_grams: 0.1
+  bullion_fineness: 0.995
+  coin_pure_gold_grams: 7.3197

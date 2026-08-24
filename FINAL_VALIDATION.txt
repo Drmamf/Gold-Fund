@@ -1,0 +1,26 @@
+Wallex Gold Fund — Final backup validation
+Date: 2026-08-15
+
+Included changes:
+- Weekend TGJU ounce carry-forward fix
+- Runtime state session.flush fix for Strategy A/B
+- Strategy B threshold Bale consolidation
+- Talagram daily asset-composition sidecar (12:00 Asia/Tehran)
+- Legacy monthly composition reminder disabled via config
+
+Validation:
+- Python compileall: PASS
+- YAML parse: 7/7 PASS
+- Reminder config: active funds=0, legacy funds=10
+- Automated tests: 51/51 PASS
+  Test-only DATABASE_URL: sqlite+pysqlite:///:memory:
+  (Real .env is intentionally excluded from the archive.)
+
+Archive exclusions:
+- .env
+- .venv/
+- logs/
+- output/
+- runtime_state/
+- __pycache__/
+- *.pyc / *.pyo
