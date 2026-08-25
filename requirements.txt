@@ -3,3 +3,4 @@ psycopg[binary]>=3.1,<4
 python-dotenv>=1.0,<2
 PyYAML>=6,<7
 requests>=2.31,<3
+andro-cfw==0.3.0

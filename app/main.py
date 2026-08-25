@@ -24,6 +24,7 @@ from app.execution.strategy_a_executor import StrategyAExecutor
 from app.execution.strategy_b_executor import StrategyBExecutor
 from app.models import BotRun, ConfigVersion, Instrument
 from app.notifications.bale_client import BaleBotClient
+from app.notifications.telegram_client import TelegramBotClient
 from app.notifications.service import BaleNotificationCoordinator
 from app.pipeline import UnifiedTradingPipeline
 from app.relative_value_engine import SharedRelativeValueEngine
@@ -211,21 +212,37 @@ def _record_config_version() -> int:
 
 
 def _build_notifications(config):
-    enabled = os.getenv("BALE_ENABLED", "true").strip().lower() not in {
-        "0", "false", "no", "off"
-    }
-    if not enabled:
+    disabled_values = {"0", "false", "no", "off"}
+
+    telegram_enabled = (
+        os.getenv("TELEGRAM_ENABLED", "false").strip().lower()
+        not in disabled_values
+    )
+    bale_enabled = (
+        os.getenv("BALE_ENABLED", "true").strip().lower()
+        not in disabled_values
+    )
+
+    if telegram_enabled:
+        client = TelegramBotClient.from_env()
+        channel = "TELEGRAM"
+    elif bale_enabled:
+        client = BaleBotClient.from_env()
+        channel = "BALE"
+    else:
         return None
-    client = BaleBotClient.from_env()
+
     export_dir = config.app.get("paths", {}).get(
         "export_dir", "./output/exports"
     )
     export_path = Path(export_dir)
     if not export_path.is_absolute():
         export_path = PROJECT_ROOT / export_path
+
     return BaleNotificationCoordinator(
         engine=engine,
         client=client,
+        channel=channel,
         output_dir=export_path,
         timezone=config.app.get("app", {}).get("timezone", "Asia/Tehran"),
     )
