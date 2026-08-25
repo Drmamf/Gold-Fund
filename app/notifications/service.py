@@ -36,11 +36,13 @@ class BaleNotificationCoordinator:
         *,
         engine: Engine,
         client: BaleBotClient,
+        channel: str = "BALE",
         output_dir: str | Path = "./output/exports",
         timezone: str = "Asia/Tehran",
     ):
         self.engine = engine
         self.client = client
+        self.channel = channel.strip().upper()
         self.tz = ZoneInfo(timezone)
         self.accounts = AccountReporter(engine, timezone=timezone)
         self.exporter = CSVExporter(
@@ -68,7 +70,7 @@ class BaleNotificationCoordinator:
                         NotificationLog(
                             cycle_id=cycle_id,
                             strategy_id=strategy_id,
-                            channel="BALE",
+                            channel=self.channel,
                             notification_type=notification_type,
                             recipient=self.client.config.chat_id,
                             message_hash=hashlib.sha256(
