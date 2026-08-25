@@ -18,7 +18,8 @@ class FakeRepo:
     def store_valuations(self, *args): pass
     def store_relative(self, *args): pass
     def load_strategy_state(self, strategy_id, *, market_date): return {}
-    def store_signals(self, cycle_id, signals): return []
+    def store_signals(self, cycle_id, signals):
+        return [], list(signals)
     def complete_cycle(self, cycle_id): pass
     def fail_cycle(self, cycle_id, exc): raise AssertionError(exc)
 
@@ -54,8 +55,9 @@ class FakeExecutor:
 
 
 class FakeNotifications:
-    def __init__(self): self.calls = 0
-    def notify_signals(self, **kwargs): self.calls += 1
+    def __init__(self): self.calls = []
+    def notify_signals(self, **kwargs):
+        self.calls.append(kwargs)
 
 
 class FakeDaily:
@@ -94,6 +96,12 @@ class PipelinePhaseTest(unittest.TestCase):
         self.assertEqual(self.executor.execute_calls, 1)
         self.assertEqual(self.executor.mark_calls, 0)
         self.assertEqual(self.repo.started[-1]["cycle_type"], "ACTIVE")
+        self.assertEqual(len(self.notifications.calls), 1)
+        self.assertEqual(
+            self.notifications.calls[0]["strategy_id"],
+            self.strategy.strategy_id,
+        )
+        self.assertEqual(self.notifications.calls[0]["generated_signals"], [])
 
     def test_close_marks_account_without_signal_generation(self):
         dt = self.dt.replace(hour=17, minute=0)

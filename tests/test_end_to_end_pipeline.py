@@ -122,7 +122,10 @@ class FakeRepo:
     def store_signals(self, cycle_id, signals):
         base = len(self.signals)
         self.signals.extend(signals)
-        return list(range(base + 1, base + 1 + len(signals)))
+        return (
+        list(range(base + 1, base + 1 + len(signals))),
+        list(signals),
+    )
     def complete_cycle(self, cycle_id): self.completed = True
     def fail_cycle(self, cycle_id, exc): raise AssertionError(exc)
 

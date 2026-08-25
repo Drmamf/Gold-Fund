@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text as sql_text
+from sqlalchemy import select, text as sql_text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.contracts import FundSnapshot, StrategySignal
-from app.models import DataError, NotificationLog
+from app.models import DataError, NotificationLog, StrategyRuntimeState
 from app.notifications.bale_client import BaleBotClient
 from app.notifications import templates
 from app.reporting.account_reporter import (
@@ -185,15 +185,208 @@ class BaleNotificationCoordinator:
             notification_type="OPERATIONAL_START",
         )
 
+    @staticmethod
+    def _rotation_opportunity_key(
+        signal: StrategySignal,
+    ) -> str | None:
+        """Stable user-facing identity for a Strategy-B rotation opportunity."""
+        if not (
+            signal.strategy_id == STRATEGY_B
+            and signal.signal_type == "ROTATE_TO"
+        ):
+            return None
+
+        position_id = (signal.payload or {}).get("position_id")
+        if (
+            position_id is None
+            or signal.source_fund_id is None
+            or signal.target_fund_id is None
+        ):
+            return None
+
+        try:
+            return ":".join(
+                (
+                    str(int(position_id)),
+                    str(int(signal.source_fund_id)),
+                    str(int(signal.target_fund_id)),
+                )
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _rotation_notification_transition(
+        *,
+        previous_state: Mapping[str, Any] | None,
+        market_date: date,
+        current_keys: set[str],
+    ) -> tuple[set[str], dict[str, Any]]:
+        """Suppress only continuously-active opportunities; absence re-arms them."""
+        previous = dict(previous_state or {})
+        notified: set[str] = set()
+
+        # Always re-arm at the start of a new trading day.
+        if previous.get("market_date") == market_date.isoformat():
+            notified = {
+                str(key)
+                for key in previous.get("notified_keys", [])
+                if key is not None
+            }
+
+        retained = notified & current_keys
+        state = {
+            "market_date": market_date.isoformat(),
+            "active_keys": sorted(current_keys),
+            "notified_keys": sorted(retained),
+        }
+        return retained, state
+
+    def _prepare_strategy_b_rotation_notifications(
+        self,
+        *,
+        market_date: date,
+        rotation_signals: Sequence[StrategySignal],
+    ) -> tuple[list[StrategySignal], set[str]]:
+        keyed: dict[str, StrategySignal] = {}
+        unkeyed: list[StrategySignal] = []
+
+        for signal in rotation_signals:
+            key = self._rotation_opportunity_key(signal)
+            if key is None:
+                # Fail-open: malformed/legacy signals must not be hidden.
+                unkeyed.append(signal)
+                continue
+            keyed.setdefault(key, signal)
+
+        current_keys = set(keyed)
+
+        try:
+            with Session(self.engine) as session:
+                with session.begin():
+                    row = session.scalar(
+                        select(StrategyRuntimeState).where(
+                            StrategyRuntimeState.strategy_id == STRATEGY_B,
+                            StrategyRuntimeState.scope_key == "NOTIFICATION",
+                            StrategyRuntimeState.state_key == "rotation_opportunities",
+                        )
+                    )
+                    retained, state_value = self._rotation_notification_transition(
+                        previous_state=(row.state_value if row is not None else {}),
+                        market_date=market_date,
+                        current_keys=current_keys,
+                    )
+
+                    if row is None:
+                        session.add(
+                            StrategyRuntimeState(
+                                strategy_id=STRATEGY_B,
+                                scope_key="NOTIFICATION",
+                                state_key="rotation_opportunities",
+                                state_value=state_value,
+                            )
+                        )
+                    else:
+                        row.state_value = state_value
+                        row.updated_at = datetime.now(self.tz)
+
+            selected = [
+                signal
+                for key, signal in keyed.items()
+                if key not in retained
+            ]
+            selected.extend(unkeyed)
+            return selected, current_keys
+
+        except Exception:
+            # Notification-state failures must never block trading or hide a signal.
+            return list(rotation_signals), current_keys
+
+    def _mark_strategy_b_rotation_notifications_sent(
+        self,
+        *,
+        market_date: date,
+        current_keys: set[str],
+        sent_keys: set[str],
+    ) -> None:
+        if not sent_keys:
+            return
+
+        try:
+            with Session(self.engine) as session:
+                with session.begin():
+                    row = session.scalar(
+                        select(StrategyRuntimeState).where(
+                            StrategyRuntimeState.strategy_id == STRATEGY_B,
+                            StrategyRuntimeState.scope_key == "NOTIFICATION",
+                            StrategyRuntimeState.state_key == "rotation_opportunities",
+                        )
+                    )
+                    _, state_value = self._rotation_notification_transition(
+                        previous_state=(row.state_value if row is not None else {}),
+                        market_date=market_date,
+                        current_keys=current_keys,
+                    )
+                    notified = set(state_value["notified_keys"])
+                    notified.update(sent_keys)
+                    notified.intersection_update(current_keys)
+                    state_value["notified_keys"] = sorted(notified)
+
+                    if row is None:
+                        session.add(
+                            StrategyRuntimeState(
+                                strategy_id=STRATEGY_B,
+                                scope_key="NOTIFICATION",
+                                state_key="rotation_opportunities",
+                                state_value=state_value,
+                            )
+                        )
+                    else:
+                        row.state_value = state_value
+                        row.updated_at = datetime.now(self.tz)
+        except Exception:
+            # A failed state write only risks a duplicate notification later.
+            pass
+
     def notify_signals(
         self,
         *,
         cycle_id: int,
         signals: Sequence[StrategySignal],
         funds: Mapping[int, FundSnapshot],
+        strategy_id: str | None = None,
+        generated_signals: Sequence[StrategySignal] | None = None,
         at: datetime | None = None,
     ) -> None:
         generated_at = at or datetime.now(self.tz)
+        persisted_signals = list(signals)
+        raw_signals = list(
+            generated_signals if generated_signals is not None else signals
+        )
+
+        effective_strategy_id = strategy_id
+        if effective_strategy_id is None:
+            for signal in raw_signals or persisted_signals:
+                effective_strategy_id = signal.strategy_id
+                break
+
+        rotation_signals_to_notify: list[StrategySignal] = []
+        current_rotation_keys: set[str] = set()
+
+        if effective_strategy_id == STRATEGY_B:
+            raw_rotations = [
+                signal
+                for signal in raw_signals
+                if signal.strategy_id == STRATEGY_B
+                and signal.signal_type == "ROTATE_TO"
+            ]
+            (
+                rotation_signals_to_notify,
+                current_rotation_keys,
+            ) = self._prepare_strategy_b_rotation_notifications(
+                market_date=generated_at.date(),
+                rotation_signals=raw_rotations,
+            )
 
         # Strategy B can persist every fund that crossed its Buy Threshold
         # for full DB audit. These are candidates, not separate user-facing
@@ -201,7 +394,7 @@ class BaleNotificationCoordinator:
         # the fund with the lowest Total Bubble in this cycle.
         threshold_candidates = [
             signal
-            for signal in signals
+            for signal in persisted_signals
             if signal.strategy_id == STRATEGY_B
             and signal.signal_type == "THRESHOLD_BUY"
         ]
@@ -221,35 +414,42 @@ class BaleNotificationCoordinator:
             )
 
             payload = dict(selected_threshold.payload or {})
-            payload["threshold_candidate_count"] = len(
-                threshold_candidates
-            )
+            payload["threshold_candidate_count"] = len(threshold_candidates)
             payload["threshold_candidate_fund_ids"] = [
                 int(s.fund_id)
-                for s in sorted(
-                    threshold_candidates,
-                    key=_bubble_rank,
-                )
+                for s in sorted(threshold_candidates, key=_bubble_rank)
                 if s.fund_id is not None
             ]
             selected_threshold.payload = payload
 
-        # All non-threshold signals are still reported normally.
         signals_to_notify = [
             signal
-            for signal in signals
+            for signal in persisted_signals
             if not (
                 signal.strategy_id == STRATEGY_B
                 and signal.signal_type == "THRESHOLD_BUY"
             )
+            and not (
+                effective_strategy_id == STRATEGY_B
+                and signal.strategy_id == STRATEGY_B
+                and signal.signal_type == "ROTATE_TO"
+            )
         ]
 
-        # Only one Strategy-B threshold entry message goes to Bale.
+        # Strategy-B rotations use raw generated opportunities for notification
+        # state. The repository/executor's existing 30-minute persistence rule
+        # remains unchanged, so this changes Bale noise only.
+        if effective_strategy_id == STRATEGY_B:
+            signals_to_notify.extend(rotation_signals_to_notify)
+
         if selected_threshold is not None:
             signals_to_notify.append(selected_threshold)
 
+        sent_rotation_keys: set[str] = set()
+
         for signal in signals_to_notify:
-            self.send_text(
+            rotation_key = self._rotation_opportunity_key(signal)
+            sent = self.send_text(
                 templates.signal_card(
                     signal,
                     funds,
@@ -264,7 +464,18 @@ class BaleNotificationCoordinator:
                     "threshold_candidate_count": (
                         signal.payload or {}
                     ).get("threshold_candidate_count"),
+                    "rotation_opportunity_key": rotation_key,
                 },
+            )
+
+            if sent and rotation_key is not None:
+                sent_rotation_keys.add(rotation_key)
+
+        if effective_strategy_id == STRATEGY_B:
+            self._mark_strategy_b_rotation_notifications_sent(
+                market_date=generated_at.date(),
+                current_keys=current_rotation_keys,
+                sent_keys=sent_rotation_keys,
             )
 
     def _suppress_repeated_stale_ounce_alert(

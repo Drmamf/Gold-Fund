@@ -114,6 +114,8 @@ class SignalNotifier(Protocol):
         cycle_id: int,
         signals: Sequence[StrategySignal],
         funds: Mapping[int, FundSnapshot],
+        strategy_id: str | None = None,
+        generated_signals: Sequence[StrategySignal] | None = None,
         at: datetime | None = None,
     ) -> None:
         ...
@@ -223,12 +225,16 @@ class UnifiedTradingPipeline:
                     cycle_id, signals
                 )
 
-                # Bale reports only persisted market SIGNALs.
-                # Deduplicated signals are not notified.
-                if self.notifications is not None and stored_signals:
+                # Notification state observes every generated Strategy-B
+                # rotation opportunity, even when the repository's existing
+                # 30-minute cooldown does not persist it. Execution still
+                # receives only persisted signal IDs, so trade logic is unchanged.
+                if self.notifications is not None:
                     self.notifications.notify_signals(
                         cycle_id=cycle_id,
+                        strategy_id=strategy.strategy_id,
                         signals=stored_signals,
+                        generated_signals=signals,
                         funds=funds,
                         at=scheduled_for,
                     )

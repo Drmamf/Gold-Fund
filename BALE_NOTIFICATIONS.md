@@ -16,6 +16,22 @@
 نباید با «معامله انجام شد» اشتباه شود. نتیجه اجرای حساب در دیتابیس و CSV روزانه
 ثبت می‌شود.
 
+## جلوگیری از تکرار سوییچ Strategy B
+
+اعلان Bale برای سوییچ Strategy B با کلید زیر شناخته می‌شود:
+
+```text
+position_id + source_fund_id + target_fund_id
+```
+
+- تا وقتی همین فرصت به‌صورت پیوسته برقرار است، فقط یک‌بار به Bale اعلام می‌شود.
+- تغییر Source یا Target یک فرصت جدید است و فوراً قابل اعلان است.
+- اگر فرصت در یک Cycle فعال وجود نداشته باشد، همان کلید re-arm می‌شود و در صورت
+  برگشت دوباره قابل اعلان است.
+- در شروع هر روز معاملاتی state اعلان reset می‌شود.
+- این state فقط مربوط به Notification است و cooldown فعلی ذخیره/اجرای Signal را
+  تغییر نمی‌دهد.
+
 ## API Error Alerts
 
 در Shared Collector هر logical provider fetch باید با `ProviderCallGuard` اجرا شود:
