@@ -306,7 +306,7 @@ def close_account_card(
     icon = "🔵" if strategy_id == "RELATIVE_BUY_HOLD" else "🟡"
 
     lines = [
-        "🧾  ** پایان تایم معاملات | 17:00 ** ",
+        "🧾  ** پایان تایم معاملات | 18:00 ** ",
         f"{icon}  ** {title} ** ",
         SEP,
         f"💼 ارزش پرتفوی: ** {money(report.get('portfolio_value'))} ** ",
