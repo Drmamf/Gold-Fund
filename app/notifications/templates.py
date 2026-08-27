@@ -24,6 +24,15 @@ def pct_fraction(value: Any, digits: int = 2) -> str:
         return "—"
 
 
+def pct_magnitude(value: Any, digits: int = 2) -> str:
+    try:
+        return (
+            f"{abs(Decimal(str(value))) * Decimal('100'):.{digits}f}٪"
+        )
+    except Exception:
+        return "—"
+
+
 def pp_fraction(value: Any, digits: int = 2) -> str:
     try:
         return f"{Decimal(str(value)) * Decimal('100'):+.{digits}f}pp"
@@ -77,6 +86,7 @@ def open_account_card(strategy_id: str, report: Mapping[str, Any]) -> str:
         f"🗓 آخرین ثبت: {safe_text(report.get('captured_at'))}",
         f"💼 ارزش پرتفوی: ** {money(report.get('portfolio_value'))} ** ",
         f"📈 بازده کل: ** {pct_fraction(report.get('total_return'))} ** ",
+        f"📉 حداکثر افت سرمایه از ابتدا: ** {pct_magnitude(report.get('max_drawdown'))} ** ",
         f"💰 سود/زیان تحقق‌یافته: {money(report.get('realized_pnl'))}",
         f"🌊 سود/زیان شناور: {money(report.get('unrealized_pnl'))}",
         SEP,
@@ -301,6 +311,7 @@ def close_account_card(
         SEP,
         f"💼 ارزش پرتفوی: ** {money(report.get('portfolio_value'))} ** ",
         f"📈 بازده کل: ** {pct_fraction(report.get('total_return'))} ** ",
+        f"📉 حداکثر افت سرمایه از ابتدا: ** {pct_magnitude(report.get('max_drawdown'))} ** ",
         f"☀️ تغییر ارزش امروز: ** {money(report.get('daily_pnl'))} ** ",
         f"💰 P&L تحقق‌یافته: {money(report.get('realized_pnl'))}",
         f"🌊 P&L شناور: {money(report.get('unrealized_pnl'))}",
