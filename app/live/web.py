@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -146,16 +145,9 @@ def _value_error(_, exc: ValueError):
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
-if STATIC_DIR.is_dir() and (STATIC_DIR / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
-
-    @app.get("/")
-    def index():
-        return FileResponse(STATIC_DIR / "index.html")
-
-    @app.get("/{full_path:path}")
-    def spa(full_path: str):
-        candidate = STATIC_DIR / full_path
-        if candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(STATIC_DIR / "index.html")
+@app.get("/")
+def index():
+    path = STATIC_DIR / "index.html"
+    if path.exists():
+        return FileResponse(path)
+    return {"ok": True, "service": "karamad-live-web"}

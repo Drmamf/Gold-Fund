@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>کنسول لایو GoldFund</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Vazirmatn, sans-serif;
+      color: #ececec;
+      background:
+        radial-gradient(1200px 700px at 15% -10%, rgba(160,160,170,.16), transparent 55%),
+        radial-gradient(900px 600px at 110% 10%, rgba(90,90,100,.22), transparent 50%),
+        #07080b;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+    .glass {
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      backdrop-filter: blur(28px) saturate(140%);
+      border-radius: 22px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.35);
+    }
+    input, button {
+      font-family: inherit;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      background: rgba(8,8,12,.45);
+      border: 1px solid rgba(255,255,255,.16);
+      color: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      background: #d4d4d8;
+      color: #111;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.ghost { background: transparent; color: #ddd; border: 1px solid rgba(255,255,255,.14); }
+    .kicker { letter-spacing: .28em; font-size: 11px; color: #a1a1aa; }
+    h1 { margin: 8px 0 0; font-size: 28px; }
+    p { color: #a1a1aa; line-height: 1.8; }
+    .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 800px) { .grid { grid-template-columns: 1fr 1fr; } .wide { grid-column: 1 / -1; } }
+    .card { padding: 20px; }
+    .stat { font-size: 28px; font-weight: 700; margin: 0; color: #fafafa; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: right; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,.08); }
+    .tabs { display: flex; gap: 8px; margin: 18px 0; }
+    .tab { border-radius: 999px; padding: 8px 16px; background: rgba(255,255,255,.04); color: #a1a1aa; border: 1px solid rgba(255,255,255,.1); }
+    .tab.on { color: #fff; background: rgba(255,255,255,.12); }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .badge { font-size: 12px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 4px 10px; }
+    .err { color: #fb7185; }
+    .ok { color: #6ee7b7; }
+    .hidden { display: none; }
+    label { display: block; margin: 10px 0 6px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"></div>
+  <script>
+    const fa = new Intl.NumberFormat("fa-IR");
+    const toman = (n) => n == null ? "—" : fa.format(Math.round(n)) + " تومان";
+    const when = (iso) => iso ? new Date(iso).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "—";
+    const api = (path, opts={}) => fetch(path, { credentials: "include", headers: { "content-type": "application/json", ...(opts.headers||{}) }, ...opts }).then(async r => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.detail || "خطا");
+      return d;
+    });
+    let tab = "overview";
+    let data = null;
+    let orders = [];
+    let authed = false;
+
+    function renderLogin(err="") {
+      document.getElementById("app").innerHTML = `
+        <form class="glass card" style="max-width:420px;margin:12vh auto;" id="login">
+          <div class="kicker">GOLDFUND / LIVE A</div>
+          <h1>کنسول ترید واقعی</h1>
+          <p>مدیریت Strategy A روی حساب کارآمد. بات کاغذی از اینجا خاموش نمی‌شود.</p>
+          ${err ? `<p class="err">${err}</p>` : ""}
+          <label>نام کاربری</label>
+          <input name="username" value="admin" dir="ltr" />
+          <label>رمز عبور</label>
+          <input name="password" type="password" dir="ltr" />
+          <button style="width:100%;margin-top:18px">ورود</button>
+        </form>`;
+      document.getElementById("login").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        try {
+          await api("/api/login", { method: "POST", body: JSON.stringify({ username: fd.get("username"), password: fd.get("password") }) });
+          authed = true; await load(); render();
+        } catch (ex) { renderLogin(ex.message); }
+      };
+    }
+
+    async function load() {
+      data = await api("/api/overview");
+      orders = (await api("/api/history")).orders || [];
+    }
+
+    function render() {
+      if (!authed || !data) return renderLogin();
+      const pnl = data.pnl_toman || 0;
+      const pnlCls = pnl > 0 ? "ok" : pnl < 0 ? "err" : "";
+      const overview = `
+        <div class="grid">
+          <section class="glass card">
+            <h3>سرمایه درگیر</h3>
+            <p class="stat">${toman(data.capital_toman)}</p>
+            <label>سقف تومان</label>
+            <div class="row">
+              <input id="cap" dir="ltr" value="${data.capital_toman}" />
+              <button id="saveCap">ذخیره سرمایه</button>
+            </div>
+          </section>
+          <section class="glass card">
+            <h3>سود / زیان</h3>
+            <p class="stat ${pnlCls}">${toman(pnl)}</p>
+            <p>${data.portfolio.current_symbol ? "هلدینگ " + data.portfolio.current_symbol : "پوزیشن زنده باز نشده"}</p>
+          </section>
+          <section class="glass card">
+            <h3>خاموش / روشن ترید واقعی</h3>
+            <p>فقط ورکر لایو. کاغذی دست نمی‌خورد.</p>
+            <button id="toggle">${data.live_enabled ? "خاموش کردن لایو" : "روشن کردن لایو"}</button>
+          </section>
+          <section class="glass card">
+            <h3>حساب متصل</h3>
+            <label>کد ملی</label>
+            <input id="nid" dir="ltr" value="${data.broker.national_id || ""}" />
+            <label>رمز جدید (اختیاری)</label>
+            <input id="npw" type="password" dir="ltr" placeholder="${data.broker.password_masked || ""}" />
+            <button id="saveBr" style="margin-top:12px">ذخیره حساب</button>
+          </section>
+          <section class="glass card wide">
+            <h3>ترکیب دارایی پرتفو</h3>
+            <table><thead><tr><th>نماد</th><th>وزن</th><th>واحد</th><th>ارزش</th></tr></thead>
+            <tbody>${(data.portfolio.holdings||[]).map(h => `<tr><td>${h.symbol}</td><td>${fa.format(h.weight_pct)}٪</td><td>${fa.format(h.units)}</td><td>${toman(h.market_toman)}</td></tr>`).join("")}</tbody></table>
+          </section>
+          <section class="glass card wide">
+            <h3>سیگنال‌های فعال</h3>
+            ${(data.signals||[]).length === 0 ? "<p>سیگنال فعالی نیست.</p>" : `<table><thead><tr><th>نوع</th><th>مسیر</th><th>لبه</th><th>لایو</th><th>زمان</th></tr></thead><tbody>
+              ${data.signals.map(s => `<tr><td>${s.type}</td><td>${s.source && s.target ? s.source+" → "+s.target : "—"}</td><td>${s.edge_pp == null ? "—" : fa.format(s.edge_pp)}٪</td><td>${s.pending_live ? "منتظر اجرا" : "—"}</td><td>${when(s.generated_at)}</td></tr>`).join("")}
+            </tbody></table>`}
+          </section>
+        </div>`;
+      const history = `
+        <section class="glass card">
+          <h3>هیستوری سفارش‌های لایو</h3>
+          ${orders.length === 0 ? "<p>هنوز سفارشی ثبت نشده.</p>" : `<table><thead><tr><th>زمان</th><th>عمل</th><th>مسیر</th><th>وضعیت</th></tr></thead><tbody>
+            ${orders.map(o => `<tr><td>${when(o.created_at)}</td><td>${o.action}</td><td>${o.source_symbol || o.target_symbol || "—"}</td><td>${o.status}${o.dry_run ? " · dry-run" : ""}</td></tr>`).join("")}
+          </tbody></table>`}
+        </section>`;
+      document.getElementById("app").innerHTML = `
+        <header class="glass card row">
+          <div>
+            <div class="kicker">STRATEGY A · KARAMAD</div>
+            <h1>کنسول ترید واقعی</h1>
+          </div>
+          <div class="row">
+            <span class="badge">${data.live_enabled ? "لایو روشن" : "لایو خاموش"}</span>
+            <span class="badge">${data.dry_run ? "DRY-RUN" : "سفارش واقعی"}</span>
+            <button class="ghost" id="out">خروج</button>
+          </div>
+        </header>
+        <div class="tabs">
+          <button class="tab ${tab==="overview"?"on":""}" id="t1">نمای کلی</button>
+          <button class="tab ${tab==="history"?"on":""}" id="t2">هیستوری</button>
+        </div>
+        ${tab === "overview" ? overview : history}`;
+      document.getElementById("t1").onclick = () => { tab = "overview"; render(); };
+      document.getElementById("t2").onclick = () => { tab = "history"; render(); };
+      document.getElementById("out").onclick = async () => { await api("/api/logout", { method: "POST" }); authed = false; renderLogin(); };
+      if (tab === "overview") {
+        document.getElementById("saveCap").onclick = async () => {
+          await api("/api/capital", { method: "POST", body: JSON.stringify({ max_toman: Number(document.getElementById("cap").value) }) });
+          await load(); render();
+        };
+        document.getElementById("toggle").onclick = async () => {
+          await api("/api/live/enabled", { method: "POST", body: JSON.stringify({ enabled: !data.live_enabled }) });
+          await load(); render();
+        };
+        document.getElementById("saveBr").onclick = async () => {
+          const body = { national_id: document.getElementById("nid").value };
+          const pw = document.getElementById("npw").value;
+          if (pw) body.password = pw;
+          await api("/api/broker", { method: "POST", body: JSON.stringify(body) });
+          await load(); render();
+        };
+      }
+    }
+
+    (async () => {
+      try {
+        const s = await api("/api/session");
+        authed = !!s.authenticated;
+        if (authed) { await load(); render(); } else renderLogin();
+      } catch { renderLogin(); }
+    })();
+  </script>
+</body>
+</html>
