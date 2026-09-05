@@ -7,6 +7,8 @@ schedule:
   - Monday
   - Tuesday
   - Wednesday
+  holidays:
+  - '2026-08-30'
   open_status_time: '12:00'
   warmup_time: '12:03'
   active_start: '12:05'

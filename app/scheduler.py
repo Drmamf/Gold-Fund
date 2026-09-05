@@ -36,6 +36,7 @@ class ScheduleEvent:
 class MarketSchedule:
     timezone: ZoneInfo
     working_weekdays: frozenset[int]
+    holidays: frozenset[date]
     open_status_time: time
     warmup_time: time
     active_start: time
@@ -64,6 +65,11 @@ class MarketSchedule:
             WEEKDAY_NAME_TO_PYTHON[name]
             for name in cfg["working_weekdays"]
         )
+        holidays = frozenset(
+            date.fromisoformat(str(value))
+            for value in cfg.get("holidays", [])
+        )
+
         cycle_seconds = int(cfg.get("cycle_seconds", 180))
         if cycle_seconds < 1:
             raise ValueError("cycle_seconds must be positive.")
@@ -91,6 +97,7 @@ class MarketSchedule:
         return cls(
             timezone=ZoneInfo(app.get("timezone", "Asia/Tehran")),
             working_weekdays=weekdays,
+            holidays=holidays,
             open_status_time=open_status,
             warmup_time=warmup,
             active_start=active_start,
@@ -109,7 +116,10 @@ class MarketSchedule:
         )
 
     def is_working_day(self, day: date) -> bool:
-        return day.weekday() in self.working_weekdays
+        return (
+            day.weekday() in self.working_weekdays
+            and day not in self.holidays
+        )
 
     def events_for_day(self, day: date) -> list[ScheduleEvent]:
         events: list[ScheduleEvent] = []
