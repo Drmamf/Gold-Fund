@@ -37,3 +37,17 @@ touching paper.
 
 `live_orders` and `live_account_state` — not `transactions` / `positions_current`.
 If a sell fills and the buy fails, live state is frozen and Bale is notified.
+
+## ChromeDriver on Iranian VPS
+
+Karamad live uses system Chrome plus `/usr/local/bin/chromedriver`. Selenium Manager
+cannot download Chrome for Testing from `storage.googleapis.com` from this host
+(HTTP 403). If Chrome updates, copy a matching chromedriver:
+
+```bash
+# from a machine that can reach Google storage:
+# https://storage.googleapis.com/chrome-for-testing-public/<chrome-version>/linux64/chromedriver-linux64.zip
+scp -P 2222 chromedriver root@HOST:/usr/local/bin/chromedriver
+```
+
+Set `CHROMEDRIVER=/usr/local/bin/chromedriver` in `.env`.

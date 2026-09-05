@@ -140,10 +140,27 @@ def _linux_chrome_options(*, user_data_dir: Path, headless: bool = False) -> Opt
     return options
 
 
+def _chromedriver_path() -> str | None:
+    """Prefer a local chromedriver. Iranian VPS often cannot fetch Chrome for Testing (403)."""
+    env = os.environ.get("CHROMEDRIVER") or os.environ.get("CHROMEDRIVER_PATH")
+    candidates = [env] if env else []
+    candidates.extend(
+        [
+            "/usr/local/bin/chromedriver",
+            "/usr/bin/chromedriver",
+            "/opt/wallex-gold/Gold-Fund/bin/chromedriver",
+        ]
+    )
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
 def setup_driver(*, user_data_dir: Path, headless: bool = False):
     options = _linux_chrome_options(user_data_dir=user_data_dir, headless=headless)
-    driver_path = os.environ.get("CHROMEDRIVER")
-    if driver_path and os.path.exists(driver_path):
+    driver_path = _chromedriver_path()
+    if driver_path:
         return webdriver.Chrome(service=Service(driver_path), options=options)
     return webdriver.Chrome(options=options)
 

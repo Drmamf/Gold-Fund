@@ -21,6 +21,22 @@ if ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium >/dev/nul
   apt-get install -y /tmp/chrome.deb || apt-get install -y chromium-browser || apt-get install -y chromium
 fi
 
+# Selenium Manager downloads chromedriver from storage.googleapis.com (often 403 in IR).
+if [[ ! -x /usr/local/bin/chromedriver ]]; then
+  CHROME_VER="$(google-chrome --product-version 2>/dev/null || true)"
+  zip=/tmp/chromedriver-linux64.zip
+  url="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VER}/linux64/chromedriver-linux64.zip"
+  if wget -q -O "$zip" "$url"; then
+    unzip -qo "$zip" -d /tmp
+    install -m 755 /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver
+  elif [[ -x "$APP_DIR/bin/chromedriver" ]]; then
+    install -m 755 "$APP_DIR/bin/chromedriver" /usr/local/bin/chromedriver
+  else
+    echo "WARN: could not fetch chromedriver for Chrome ${CHROME_VER:-unknown}."
+    echo "Copy a matching binary to /usr/local/bin/chromedriver"
+  fi
+fi
+
 cd "$APP_DIR"
 # shellcheck disable=SC1091
 source .venv/bin/activate
