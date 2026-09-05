@@ -11,3 +11,5 @@ runtime_state/
 
 *.before_*
 cfw.session
+logs/live/
+runtime_state/chrome-profile/

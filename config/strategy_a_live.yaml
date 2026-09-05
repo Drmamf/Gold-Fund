@@ -1,0 +1,31 @@
+# Live Strategy A on Karamad. Paper Strategy A/B are unaffected.
+strategy_id: "RELATIVE_BUY_HOLD"
+anchor_symbol: "عیار"
+
+capital:
+  # Hard cap on NEW cash deployed (bootstrap). Rotations keep profits invested.
+  max_toman: 50000000
+  toman_to_rial: 10
+
+execution:
+  sell_at: "best_bid"
+  buy_at: "best_ask"
+  unit_step: 1
+  confirm_seconds: 2
+  poll_seconds: 20
+
+whitelist:
+  - "عیار"
+  - "کهربا"
+  - "مثقال"
+  - "گوهر"
+  - "گنج"
+  - "آلتون"
+  - "زر"
+  - "لیان"
+  - "رز ترنج"
+  - "زروان"
+
+broker:
+  login_url: "https://karamad.ephoenix.ir/auth/login"
+  dashboard_url: "https://karamad.ephoenix.ir/dashboard/premium/stock"

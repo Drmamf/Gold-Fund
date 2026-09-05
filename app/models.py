@@ -581,3 +581,53 @@ class BotRun(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="RUNNING")
     version: Mapped[Optional[str]] = mapped_column(String(128))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
+class LiveOrder(Base):
+    """Real-broker Strategy A fills. Never mixed with paper transactions."""
+
+    __tablename__ = "live_orders"
+    __table_args__ = (
+        UniqueConstraint("intent_key", name="uq_live_orders_intent_key"),
+        Index("ix_live_orders_signal", "signal_id"),
+        Index("ix_live_orders_status_time", "status", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    intent_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    signal_id: Mapped[Optional[int]] = mapped_column(ForeignKey("signals.id"))
+    cycle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("market_cycles.id"))
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_symbol: Mapped[Optional[str]] = mapped_column(String(64))
+    target_symbol: Mapped[Optional[str]] = mapped_column(String(64))
+    price: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    quantity: Mapped[Optional[Decimal]] = mapped_column(NUM)
+    notional_rial: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    broker_notification: Mapped[Optional[str]] = mapped_column(Text)
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class LiveAccountState(Base):
+    """Singleton live book for Strategy A on the real Karamad account."""
+
+    __tablename__ = "live_account_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    current_symbol: Mapped[Optional[str]] = mapped_column(String(64))
+    current_units: Mapped[Decimal] = mapped_column(NUM, nullable=False, default=0)
+    frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    freeze_reason: Mapped[Optional[str]] = mapped_column(String(512))
+    last_signal_id: Mapped[Optional[int]] = mapped_column(ForeignKey("signals.id"))
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

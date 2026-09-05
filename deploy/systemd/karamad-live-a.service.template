@@ -1,0 +1,22 @@
+[Unit]
+Description=Wallex Gold Fund Live Strategy A (Karamad)
+After=network-online.target docker.service wallex-gold.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_GROUP__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+Environment=DISPLAY=:99
+ExecStartPre=/usr/bin/mkdir -p /tmp/karamad-xvfb
+ExecStart=/usr/bin/xvfb-run --server-num=99 --error-file=/tmp/karamad-xvfb/xvfb.log -s "-screen 0 1920x1080x24 -ac +extension GLX +render -noreset" __APP_DIR__/.venv/bin/python -m app.live.worker
+Restart=always
+RestartSec=15
+TimeoutStopSec=40
+KillSignal=SIGTERM
+# Chrome needs a real /tmp; do not enable PrivateTmp.
+
+[Install]
+WantedBy=multi-user.target
