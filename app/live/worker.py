@@ -15,6 +15,7 @@ from app.database import Base, SessionLocal, engine
 from app.live.karamad_client import KaramadClient
 from app.live.policy import notification_ok
 from app.live.sizing import is_whitelisted, live_buy_budget_rial, qty_for_budget, toman_to_rial
+from app.live.notify import notify_ops
 from app.live.store import LiveStore
 from app.scheduler import MarketSchedule
 
@@ -47,15 +48,6 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _maybe_bale(text: str) -> None:
-    if os.getenv("BALE_ENABLED", "true").strip().lower() in {"0", "false", "no", "off"}:
-        return
-    try:
-        from app.notifications.bale_client import BaleBotClient
-
-        BaleBotClient.from_env().send_message(text)
-    except Exception:
-        logger.exception("Live Bale notify failed")
 
 
 class LiveStrategyAWorker:
@@ -148,9 +140,30 @@ class LiveStrategyAWorker:
 
         self.client.close()
 
+    def _reload_live_settings(self) -> None:
+        load_dotenv(PROJECT_ROOT / ".env", override=True)
+        self.enabled = _env_bool("KARAMAD_LIVE_ENABLED", True)
+        self.dry_run = _env_bool("KARAMAD_DRY_RUN", True)
+        if os.getenv("KARAMAD_MAX_TOMAN"):
+            self.cap_rial = toman_to_rial(os.getenv("KARAMAD_MAX_TOMAN"))
+        else:
+            capital = self.cfg.get("capital") or {}
+            try:
+                with (PROJECT_ROOT / "config" / "strategy_a_live.yaml").open("r", encoding="utf-8") as fh:
+                    self.cfg = yaml.safe_load(fh) or {}
+                capital = self.cfg.get("capital") or {}
+            except Exception:
+                logger.exception("reload live yaml failed")
+            self.cap_rial = toman_to_rial(capital.get("max_toman", 50_000_000))
+        self.client.username = os.getenv("KARAMAD_USERNAME", "").strip()
+        self.client.password = os.getenv("KARAMAD_PASSWORD", "").strip()
+
     def _tick(self) -> None:
+        self._reload_live_settings()
         now = datetime.now(self.schedule.timezone)
         if not self.enabled or self._kill_switch():
+            if self.client.driver is not None:
+                self.client.close()
             return
         if not self._should_keep_session(now):
             if self.client.driver is not None:
@@ -231,14 +244,17 @@ class LiveStrategyAWorker:
                         current_symbol=self.anchor,
                         current_units=qty,
                         last_signal_id=None,
+                        details={"cost_rial": int(qty * Decimal(ask)), "entry_price": int(ask)},
                     )
-                _maybe_bale(
-                    f"Live A {'DRY-RUN ' if self.dry_run else ''}خرید اولیه {self.anchor}\n"
-                    f"تعداد {qty} | قیمت {ask:,} ریال | بودجه {int(budget):,} ریال"
+                mode = "DRY-RUN " if self.dry_run else "حساب واقعی | "
+                notify_ops(
+                    f"⚡️ {mode}خرید اولیه Strategy A\n"
+                    f"{self.anchor} | تعداد {qty} | قیمت {ask:,} ریال\n"
+                    f"بودجه {int(budget):,} ریال"
                 )
             else:
                 self.client.save_debug("bootstrap_failed")
-                _maybe_bale(f"Live A خرید اولیه ناموفق: {reason}")
+                notify_ops(f"Live A خرید اولیه ناموفق: {reason}")
         except Exception as exc:
             logger.exception("bootstrap failed")
             self.store.update_order(order_id, status="FAILED", error_message=str(exc))
@@ -283,7 +299,7 @@ class LiveStrategyAWorker:
                         "signal_source": source_symbol,
                     },
                 )
-                _maybe_bale(
+                notify_ops(
                     f"Live A سیگنال Rotation نادیده گرفته شد: "
                     f"هلدینگ زنده {state['current_symbol']} ≠ {source_symbol}"
                 )
@@ -316,7 +332,7 @@ class LiveStrategyAWorker:
                     details={"sell_button": sell_label},
                 )
                 self.client.save_debug(f"sell_failed_{signal_id}")
-                _maybe_bale(f"Live A فروش {source_symbol} ناموفق: {sell_reason}")
+                notify_ops(f"Live A فروش {source_symbol} ناموفق: {sell_reason}")
                 return
 
             if not self.dry_run:
@@ -338,7 +354,7 @@ class LiveStrategyAWorker:
                     broker_notification=sell_notif,
                     error_message="BUY_QTY_ZERO_AFTER_SELL",
                 )
-                _maybe_bale("Live A فروش شد ولی قدرت خرید برای مقصد کافی نیست. حساب فریز شد.")
+                notify_ops("Live A فروش شد ولی قدرت خرید برای مقصد کافی نیست. حساب فریز شد.")
                 return
 
             buy_label, buy_notif = self.client.place_limit(
@@ -364,7 +380,7 @@ class LiveStrategyAWorker:
                     details={"sell_ok": True, "buy_button": buy_label},
                 )
                 self.client.save_debug(f"buy_failed_{signal_id}")
-                _maybe_bale(
+                notify_ops(
                     f"Live A فروش {source_symbol} موفق، خرید {target_symbol} ناموفق. فریز شد.\n{buy_reason}"
                 )
                 return
@@ -376,6 +392,10 @@ class LiveStrategyAWorker:
                     last_signal_id=signal_id,
                     frozen=False,
                     freeze_reason=None,
+                    details={
+                        "cost_rial": int(Decimal(int(buy_qty)) * Decimal(str(target_ask))),
+                        "entry_price": int(Decimal(str(target_ask))),
+                    },
                 )
             self.store.update_order(
                 order_id,
@@ -392,10 +412,12 @@ class LiveStrategyAWorker:
                     "buy_button": buy_label,
                 },
             )
-            _maybe_bale(
-                f"Live A {'DRY-RUN ' if self.dry_run else ''}Rotation {source_symbol} → {target_symbol}\n"
-                f"فروش {units} @ {int(Decimal(str(source_bid))):,} | "
-                f"خرید {int(buy_qty)} @ {int(Decimal(str(target_ask))):,}"
+            mode = "DRY-RUN " if self.dry_run else "حساب واقعی | "
+            notify_ops(
+                f"⚡️ {mode}Rotation Strategy A\n"
+                f"{source_symbol} → {target_symbol}\n"
+                f"فروش {units} @ {int(Decimal(str(source_bid))):,} ریال | "
+                f"خرید {int(buy_qty)} @ {int(Decimal(str(target_ask))):,} ریال"
             )
         except Exception as exc:
             logger.exception("rotation failed signal=%s", signal_id)

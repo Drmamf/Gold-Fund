@@ -96,26 +96,44 @@ class LiveStore:
                 row.updated_at = datetime.now(timezone.utc)
 
     def pending_rotations(self) -> list[dict[str, Any]]:
+        """Only unclaimed ROTATE_TO from today's latest completed ACTIVE cycle."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tehran = ZoneInfo("Asia/Tehran")
+        today = datetime.now(tehran).date()
         with self.session_factory() as session:
+            latest = session.scalar(
+                select(MarketCycle)
+                .where(
+                    MarketCycle.cycle_type == "ACTIVE",
+                    MarketCycle.status == "COMPLETED",
+                )
+                .order_by(MarketCycle.id.desc())
+                .limit(1)
+            )
+            if latest is None:
+                return []
             claimed = select(LiveOrder.signal_id).where(LiveOrder.signal_id.is_not(None))
             rows = session.execute(
-                select(Signal, MarketCycle)
-                .join(MarketCycle, MarketCycle.id == Signal.cycle_id)
+                select(Signal)
                 .where(
                     Signal.strategy_id == STRATEGY_A,
                     Signal.signal_type == "ROTATE_TO",
-                    MarketCycle.cycle_type == "ACTIVE",
-                    MarketCycle.status == "COMPLETED",
+                    Signal.cycle_id == latest.id,
                     Signal.id.not_in(claimed),
                 )
                 .order_by(Signal.id.asc())
-            ).all()
+            ).scalars().all()
             out = []
-            for signal, cycle in rows:
+            for signal in rows:
+                generated = signal.generated_at.astimezone(tehran) if signal.generated_at else None
+                if generated is None or generated.date() != today:
+                    continue
                 out.append(
                     {
                         "signal_id": int(signal.id),
-                        "cycle_id": int(cycle.id),
+                        "cycle_id": int(latest.id),
                         "source_fund_id": signal.source_fund_id,
                         "target_fund_id": signal.target_fund_id,
                         "payload": dict(signal.payload or {}),

@@ -1,0 +1,18 @@
+[Unit]
+Description=Wallex Gold Fund Live Strategy A web console
+After=network-online.target docker.service wallex-gold.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+Group=__SERVICE_GROUP__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=__APP_DIR__/.venv/bin/python -m uvicorn app.live.web:app --host 0.0.0.0 --port 43147
+Restart=always
+RestartSec=8
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
