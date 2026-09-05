@@ -51,3 +51,10 @@ scp -P 2222 chromedriver root@HOST:/usr/local/bin/chromedriver
 ```
 
 Set `CHROMEDRIVER=/usr/local/bin/chromedriver` in `.env`.
+
+## Sahra WAF / Chrome fingerprint
+
+`karamad.ephoenix.ir` returns Access Denied for HeadlessChrome and Chrome 152
+user-agents from the GoldFund VPS. The live client spoofs a Chrome 124 Windows
+UA and clears `navigator.webdriver`. Keep `KARAMAD_HEADLESS=false` and run under
+Xvfb (`karamad-live-a.service` already does this).

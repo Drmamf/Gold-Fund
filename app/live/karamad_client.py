@@ -122,6 +122,11 @@ def _linux_chrome_options(*, user_data_dir: Path, headless: bool = False) -> Opt
     options.add_argument(f"--user-data-dir={user_data_dir}")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
+    # Sahra WAF blocks HeadlessChrome / very new Chrome UAs from this VPS.
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
     if headless:
         options.add_argument("--headless=new")
     chrome_bin = os.environ.get("CHROME_BIN") or os.environ.get("GOOGLE_CHROME_BIN")
@@ -199,6 +204,29 @@ class KaramadClient:
             user_data_dir=self.user_data_dir,
             headless=self.headless,
         )
+        self._stealth()
+
+    def _stealth(self) -> None:
+        driver = self.driver
+        ua = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+        try:
+            driver.execute_cdp_cmd(
+                "Network.setUserAgentOverride",
+                {"userAgent": ua, "platform": "Windows"},
+            )
+            driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {
+                    "source": (
+                        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                    )
+                },
+            )
+        except Exception:
+            logger.exception("Chrome stealth CDP failed")
 
     def close(self) -> None:
         if self.driver is not None:
