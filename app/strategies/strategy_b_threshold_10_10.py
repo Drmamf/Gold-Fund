@@ -390,6 +390,7 @@ class Threshold1010RelativeStrategy(StrategyBase):
             best = candidates[0]
             best_target = int(best["target_fund_id"])
             best_edge = Decimal(str(best["net_executable_edge"]))
+            target_val = valuations[best_target]
             signals.append(
                 StrategySignal(
                     strategy_id=self.strategy_id,
@@ -408,6 +409,21 @@ class Threshold1010RelativeStrategy(StrategyBase):
                         "origin_entry_type": pos.get("origin_entry_type"),
                         "best_market_target_fund_id": best_target,
                         "best_market_target_symbol": best.get("target_symbol"),
+                        "source_total_bubble": (
+                            str(source_val.total_bubble)
+                            if source_val.total_bubble is not None
+                            else None
+                        ),
+                        "target_total_bubble": (
+                            str(target_val.total_bubble)
+                            if target_val.total_bubble is not None
+                            else None
+                        ),
+                        "market_average_total_bubble": (
+                            str(market_average_total_bubble)
+                            if market_average_total_bubble is not None
+                            else None
+                        ),
                         "candidate_targets": candidates,
                         "min_required_edge": str(self.relative_min_edge_fraction),
                         "min_required_edge_pct_points": str(
