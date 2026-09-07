@@ -305,6 +305,21 @@ class Threshold1010RelativeStrategy(StrategyBase):
         )
         market_date = self._market_date(common, runtime_state)
 
+        # Average Total Bubble of all valid/eligible gold funds in this cycle.
+        valid_market_bubbles = [
+            valuation.total_bubble
+            for fund_id, valuation in valuations.items()
+            if valuation is not None
+            and valuation.valid
+            and valuation.total_bubble is not None
+            and self._market_eligible(funds.get(int(fund_id)))
+        ]
+        market_average_total_bubble = (
+            sum(valid_market_bubbles, ZERO) / Decimal(len(valid_market_bubbles))
+            if valid_market_bubbles
+            else None
+        )
+
         # ---------------------------------------------------------------
         # 1) EXIT: current fund's sell threshold always wins.
         # ---------------------------------------------------------------
@@ -440,6 +455,11 @@ class Threshold1010RelativeStrategy(StrategyBase):
                             "allocation_fraction": str(self.threshold_entry_fraction),
                             "allocation_pct": str(self.threshold_entry_fraction * 100),
                             "buy_threshold": str(valuation.buy_threshold),
+                            "market_average_total_bubble": (
+                                str(market_average_total_bubble)
+                                if market_average_total_bubble is not None
+                                else None
+                            ),
                             "rearm_threshold": str(
                                 valuation.buy_threshold + self.buy_rearm_fraction
                             ),
@@ -522,6 +542,12 @@ class Threshold1010RelativeStrategy(StrategyBase):
                                 "entry_route": "MA7_FALLBACK",
                                 "allocation_fraction": str(self.ma7_second_entry_fraction),
                                 "allocation_pct": str(self.ma7_second_entry_fraction * 100),
+                                "buy_threshold": best["buy_threshold"],
+                                "market_average_total_bubble": (
+                                    str(market_average_total_bubble)
+                                    if market_average_total_bubble is not None
+                                    else None
+                                ),
                                 "candidate_funds_by_total_bubble": candidates,
                                 "current_total_trade_value": str(current_total_trade_value),
                                 "previous_7d_average_trade_value": str(previous_avg),

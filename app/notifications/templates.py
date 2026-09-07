@@ -239,7 +239,9 @@ def signal_card(
             "✅ شرط ارزش معاملات: پاس شده",
             "",
             f"🏷 صندوق منتخب: ** {target} ** ",
-            f"🫧 Total Bubble: ** {pct_fraction(signal.total_bubble)} ** ",
+            f"🫧 حباب فعلی صندوق: ** {pct_fraction(signal.total_bubble)} ** ",
+            f"🎚 آستانه خرید صندوق: ** {pct_fraction(p.get('buy_threshold'))} ** ",
+            f"📊 میانگین حباب بازار: ** {pct_fraction(p.get('market_average_total_bubble'))} ** ",
             f"💼 اندازه ورود: {p.get('allocation_pct', '10')}٪ پرتفوی",
             SEP,
             "📌 اقدام استراتژی: ** ورود پله دوم برای کاهش میانگین ** ",
@@ -283,8 +285,9 @@ def signal_card(
 
     lines.extend([
         f"🧭 مسیر: {route_display}",
-        f"🫧 Total Bubble: ** {pct_fraction(signal.total_bubble)} ** ",
-        f"🎚 Buy Threshold: {pct_fraction(p.get('buy_threshold'))}",
+        f"🫧 حباب فعلی صندوق: ** {pct_fraction(signal.total_bubble)} ** ",
+        f"🎚 آستانه خرید صندوق: ** {pct_fraction(p.get('buy_threshold'))} ** ",
+        f"📊 میانگین حباب بازار: ** {pct_fraction(p.get('market_average_total_bubble'))} ** ",
         f"🔓 Rearm Level: {pct_fraction(p.get('rearm_threshold'))}",
         f"💼 اندازه ورود: {p.get('allocation_pct', '10')}٪ پرتفوی",
         SEP,
