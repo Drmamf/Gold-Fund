@@ -29,8 +29,11 @@ TEHRAN = ZoneInfo("Asia/Tehran")
 STRATEGY_A = "RELATIVE_BUY_HOLD"
 ENV_PATH = PROJECT_ROOT / ".env"
 YAML_PATH = PROJECT_ROOT / "config" / "strategy_a_live.yaml"
+RELATIVE_YAML = PROJECT_ROOT / "config" / "relative_value.yaml"
 KILL_PATH = PROJECT_ROOT / "runtime_state" / "LIVE_A_KILL"
 TOMAN_PER_RIAL = Decimal("0.1")
+DEFAULT_BUY_FEE = Decimal("0.00125")
+DEFAULT_SELL_FEE = Decimal("0.00125")
 
 
 def _reload_env() -> None:
@@ -186,6 +189,94 @@ def _state_row(session: Session) -> LiveAccountState:
     return row
 
 
+def _fee_rates() -> tuple[Decimal, Decimal]:
+    buy, sell = DEFAULT_BUY_FEE, DEFAULT_SELL_FEE
+    try:
+        with RELATIVE_YAML.open("r", encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+        costs = ((cfg.get("relative_value") or {}).get("execution_costs") or {})
+        if costs.get("buy_fee_rate") is not None:
+            buy = Decimal(str(costs["buy_fee_rate"]))
+        if costs.get("sell_fee_rate") is not None:
+            sell = Decimal(str(costs["sell_fee_rate"]))
+    except Exception:
+        pass
+    return buy, sell
+
+
+def _order_path(row: LiveOrder) -> str:
+    src = (row.source_symbol or "").strip()
+    tgt = (row.target_symbol or "").strip()
+    if src and tgt:
+        return f"{src} → {tgt}"
+    return tgt or src or "—"
+
+
+def _initial_cost_rial(session: Session) -> Decimal:
+    row = session.scalar(
+        select(LiveOrder)
+        .where(LiveOrder.status == "FILLED", LiveOrder.action == "BOOTSTRAP_BUY")
+        .order_by(LiveOrder.id.asc())
+        .limit(1)
+    )
+    if row is None:
+        return Decimal("0")
+    if row.notional_rial is not None:
+        return _dec(row.notional_rial)
+    return _dec(row.quantity) * _dec(row.price)
+
+
+def _filled_order_fees(row: LiveOrder, buy_rate: Decimal, sell_rate: Decimal) -> Decimal:
+    if row.status != "FILLED" or bool(row.dry_run):
+        return Decimal("0")
+    details = dict(row.details or {})
+    action = (row.action or "").upper()
+    if action == "BOOTSTRAP_BUY":
+        notional = _dec(row.notional_rial) or _dec(row.quantity) * _dec(row.price)
+        return notional * buy_rate
+    sell_qty = _dec(details.get("sell_qty") or 0)
+    sell_price = _dec(details.get("sell_price") or 0)
+    buy_qty = _dec(details.get("buy_qty") or 0)
+    buy_price = _dec(
+        details.get("broker_avg_price")
+        or details.get("buy_price")
+        or details.get("buy_limit")
+        or 0
+    )
+    if action in {"MANUAL_SYNC", "ROTATE"}:
+        if buy_qty <= 0:
+            buy_qty = _dec(row.quantity)
+        if buy_price <= 0:
+            buy_price = _dec(row.price)
+        return sell_qty * sell_price * sell_rate + buy_qty * buy_price * buy_rate
+    return Decimal("0")
+
+
+def system_pnl(session: Session, *, market_rial: Decimal) -> dict[str, Any]:
+    """Live Strategy A P&L from first bootstrap, not just the current holding."""
+    buy_rate, sell_rate = _fee_rates()
+    initial = _initial_cost_rial(session)
+    fees = Decimal("0")
+    filled = session.execute(
+        select(LiveOrder).where(LiveOrder.status == "FILLED").order_by(LiveOrder.id.asc())
+    ).scalars().all()
+    for row in filled:
+        fees += _filled_order_fees(row, buy_rate, sell_rate)
+    gross = market_rial - initial if initial > 0 else Decimal("0")
+    net = gross - fees if initial > 0 else Decimal("0")
+    return {
+        "without_fee_toman": _toman(gross) if initial > 0 else 0,
+        "with_fee_toman": _toman(net) if initial > 0 else 0,
+        "without_fee_pct": float((gross / initial) * 100) if initial > 0 else 0.0,
+        "with_fee_pct": float((net / initial) * 100) if initial > 0 else 0.0,
+        "fees_paid_toman": _toman(fees),
+        "initial_toman": _toman(initial) if initial > 0 else None,
+        "mark_toman": _toman(market_rial),
+        "buy_fee_rate": float(buy_rate),
+        "sell_fee_rate": float(sell_rate),
+    }
+
+
 def portfolio_and_pnl(session: Session) -> dict[str, Any]:
     row = _state_row(session)
     cycle = _latest_cycle(session)
@@ -198,7 +289,7 @@ def portfolio_and_pnl(session: Session) -> dict[str, Any]:
     ask = quote.get("best_ask")
     cost_rial = _dec(details.get("cost_rial") or 0)
     market_rial = units * _dec(bid) if bid is not None and units > 0 else Decimal("0")
-    pnl_rial = (market_rial - cost_rial) if cost_rial > 0 and units > 0 else Decimal("0")
+    sys_pnl = system_pnl(session, market_rial=market_rial)
     holdings = []
     if symbol and units > 0:
         holdings.append(
@@ -232,8 +323,9 @@ def portfolio_and_pnl(session: Session) -> dict[str, Any]:
         "holdings": holdings,
         "market_toman": _toman(market_rial) if units > 0 else 0,
         "cost_toman": _toman(cost_rial) if cost_rial > 0 else None,
-        "pnl_toman": _toman(pnl_rial) if cost_rial > 0 and units > 0 else 0,
-        "pnl_pct": float((pnl_rial / cost_rial) * 100) if cost_rial > 0 and units > 0 else 0.0,
+        "pnl_toman": sys_pnl["without_fee_toman"],
+        "pnl_pct": sys_pnl["without_fee_pct"],
+        "system_pnl": sys_pnl,
         "mark_source": "best_bid",
         "quote_cycle_id": int(cycle.id) if cycle is not None else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -301,6 +393,7 @@ def order_history(session: Session, limit: int = 200) -> list[dict[str, Any]]:
                 "status": row.status,
                 "source_symbol": row.source_symbol,
                 "target_symbol": row.target_symbol,
+                "path": _order_path(row),
                 "price_rial": int(_dec(row.price)) if row.price is not None else None,
                 "quantity": float(_dec(row.quantity)) if row.quantity is not None else None,
                 "notional_toman": _toman(row.notional_rial) if row.notional_rial is not None else None,
@@ -325,6 +418,7 @@ def overview(session: Session) -> dict[str, Any]:
         "broker": broker_public(),
         "portfolio": port,
         "pnl_toman": port["pnl_toman"],
+        "system_pnl": port.get("system_pnl") or {},
         "signals": active_signals(session),
         "clock": datetime.now(TEHRAN).isoformat(),
         "strategy": "RELATIVE_BUY_HOLD",

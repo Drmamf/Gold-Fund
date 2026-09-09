@@ -56,6 +56,8 @@
     @media (min-width: 800px) { .grid { grid-template-columns: 1fr 1fr; } .wide { grid-column: 1 / -1; } }
     .card { padding: 20px; }
     .stat { font-size: 28px; font-weight: 700; margin: 0; color: #fafafa; }
+    .stat.sm { font-size: 22px; margin-top: 4px; }
+    .pnl-label { font-size: 12px; color: #a1a1aa; margin: 12px 0 4px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { text-align: right; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,.08); }
     .tabs { display: flex; gap: 8px; margin: 18px 0; }
@@ -73,7 +75,12 @@
   <div class="wrap" id="app"></div>
   <script>
     const fa = new Intl.NumberFormat("fa-IR");
-    const toman = (n) => n == null ? "—" : fa.format(Math.round(n)) + " تومان";
+    const orderPath = (o) => {
+      if (o.path) return o.path;
+      if (o.source_symbol && o.target_symbol) return o.source_symbol + " → " + o.target_symbol;
+      return o.target_symbol || o.source_symbol || "—";
+    };
+    const pct = (n) => n == null ? "—" : fa.format(Number(n)) + "٪";
     const when = (iso) => iso ? new Date(iso).toLocaleString("fa-IR", { timeZone: "Asia/Tehran" }) : "—";
     const api = (path, opts={}) => fetch(path, { credentials: "include", headers: { "content-type": "application/json", ...(opts.headers||{}) }, ...opts }).then(async r => {
       const d = await r.json().catch(() => ({}));
@@ -115,8 +122,11 @@
 
     function render() {
       if (!authed || !data) return renderLogin();
-      const pnl = data.pnl_toman || 0;
-      const pnlCls = pnl > 0 ? "ok" : pnl < 0 ? "err" : "";
+      const sys = data.system_pnl || (data.portfolio && data.portfolio.system_pnl) || {};
+      const gross = sys.without_fee_toman ?? data.pnl_toman ?? 0;
+      const net = sys.with_fee_toman ?? 0;
+      const grossCls = gross > 0 ? "ok" : gross < 0 ? "err" : "";
+      const netCls = net > 0 ? "ok" : net < 0 ? "err" : "";
       const overview = `
         <div class="grid">
           <section class="glass card">
@@ -129,9 +139,14 @@
             </div>
           </section>
           <section class="glass card">
-            <h3>سود / زیان</h3>
-            <p class="stat ${pnlCls}">${toman(pnl)}</p>
-            <p>${data.portfolio.current_symbol ? "هلدینگ " + data.portfolio.current_symbol : "پوزیشن زنده باز نشده"}</p>
+            <h3>سود / زیان کل سیستم</h3>
+            <p class="pnl-label">از ابتدا · بدون کارمزد</p>
+            <p class="stat ${grossCls}">${toman(gross)}</p>
+            <p>${pct(sys.without_fee_pct)}</p>
+            <p class="pnl-label">از ابتدا · با کارمزد</p>
+            <p class="stat sm ${netCls}">${toman(net)}</p>
+            <p>${pct(sys.with_fee_pct)}</p>
+            <p>کارمزد پرداخت‌شده ${toman(sys.fees_paid_toman)} · نرخ ${pct((sys.buy_fee_rate || 0) * 100)}</p>
           </section>
           <section class="glass card">
             <h3>خاموش / روشن ترید واقعی</h3>
@@ -163,7 +178,7 @@
         <section class="glass card">
           <h3>هیستوری سفارش‌های لایو</h3>
           ${orders.length === 0 ? "<p>هنوز سفارشی ثبت نشده.</p>" : `<table><thead><tr><th>زمان</th><th>عمل</th><th>مسیر</th><th>وضعیت</th></tr></thead><tbody>
-            ${orders.map(o => `<tr><td>${when(o.created_at)}</td><td>${o.action}</td><td>${o.source_symbol || o.target_symbol || "—"}</td><td>${o.status}${o.dry_run ? " · dry-run" : ""}</td></tr>`).join("")}
+            ${orders.map(o => `<tr><td>${when(o.created_at)}</td><td>${o.action}</td><td>${orderPath(o)}</td><td>${o.status}${o.dry_run ? " · dry-run" : ""}</td></tr>`).join("")}
           </tbody></table>`}
         </section>`;
       document.getElementById("app").innerHTML = `
