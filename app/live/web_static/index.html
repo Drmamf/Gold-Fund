@@ -75,6 +75,7 @@
   <div class="wrap" id="app"></div>
   <script>
     const fa = new Intl.NumberFormat("fa-IR");
+    const toman = (n) => n == null ? "—" : fa.format(Math.round(n)) + " تومان";
     const orderPath = (o) => {
       if (o.path) return o.path;
       if (o.source_symbol && o.target_symbol) return o.source_symbol + " → " + o.target_symbol;
