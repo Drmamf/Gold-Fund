@@ -10,7 +10,7 @@ account:
 relative_rotation:
   enabled: true
   allow_direct_fund_to_fund: true
-  min_net_executable_edge_pct_points: 0.50
+  min_net_executable_edge_pct_points: 0.40
 
 execution:
   sell_at: "best_bid"
