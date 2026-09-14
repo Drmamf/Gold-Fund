@@ -210,6 +210,20 @@ class MarketSchedule:
                     return event
         raise RuntimeError("Could not resolve next schedule event.")
 
+    def missed_close_event(self, now: datetime) -> Optional[ScheduleEvent]:
+        """CLOSE at 18:00 must still run if the last ACTIVE cycle overran."""
+        if now.tzinfo is None:
+            raise ValueError("now must be timezone-aware.")
+        local_now = now.astimezone(self.timezone)
+        if not self.is_working_day(local_now.date()):
+            return None
+        close_at = datetime.combine(
+            local_now.date(), self.close_snapshot_time, tzinfo=self.timezone
+        )
+        if local_now < close_at:
+            return None
+        return ScheduleEvent("CLOSE", close_at)
+
 
 class TradingScheduler:
     def __init__(
@@ -233,7 +247,15 @@ class TradingScheduler:
         self.sleep_fn = sleep_fn or time_module.sleep
         self.heartbeat_fn = heartbeat_fn
         self._last_event_key: Optional[str] = None
+        self._close_sent_on: set[date] = set()
         self.logger = logging.getLogger("wallex_gold.scheduler")
+
+    def pick_event(self, now: datetime) -> ScheduleEvent:
+        """Prefer today's CLOSE if the clock already passed 18:00 and it has not run."""
+        missed = self.schedule.missed_close_event(now)
+        if missed is not None and missed.scheduled_for.date() not in self._close_sent_on:
+            return missed
+        return self.schedule.next_event_after(now, include_now=True)
 
     def dispatch(self, event: ScheduleEvent):
         trade_date = event.scheduled_for.date()
@@ -268,10 +290,19 @@ class TradingScheduler:
             )
 
         if event.phase == "CLOSE":
-            cycle_id = self.pipeline.run_close(
-                trade_date=trade_date,
-                scheduled_for=event.scheduled_for,
-            )
+            from app.repository import CycleAlreadyProcessed
+
+            cycle_id = None
+            try:
+                cycle_id = self.pipeline.run_close(
+                    trade_date=trade_date,
+                    scheduled_for=event.scheduled_for,
+                )
+            except CycleAlreadyProcessed:
+                self.logger.info(
+                    "CLOSE cycle already recorded | trade_date=%s",
+                    trade_date.isoformat(),
+                )
             if self.notifications is not None:
                 self.notifications.send_close_bundle(trade_date)
             return cycle_id
@@ -286,7 +317,7 @@ class TradingScheduler:
     def run_forever(self) -> None:
         while True:
             now = self.now_fn().astimezone(self.schedule.timezone)
-            event = self.schedule.next_event_after(now, include_now=True)
+            event = self.pick_event(now)
 
             delay = max(
                 0.0,
@@ -319,6 +350,8 @@ class TradingScheduler:
                     event.scheduled_for.isoformat(),
                 )
             finally:
+                if event.phase == "CLOSE":
+                    self._close_sent_on.add(event.scheduled_for.date())
                 self._last_event_key = event.key
                 if self.heartbeat_fn is not None:
                     self.heartbeat_fn()

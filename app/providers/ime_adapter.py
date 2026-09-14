@@ -109,8 +109,8 @@ class IMEAdapter:
         endpoint: str,
         bullion_contract_code: str = "GoldBar",
         coin_contract_code: str = "GoldCoin",
-        timeout_seconds: float = 15,
-        retries: int = 3,
+        timeout_seconds: float = 8,
+        retries: int = 2,
         retry_backoff_seconds: float = 1.2,
         headers: Optional[dict[str, str]] = None,
     ):

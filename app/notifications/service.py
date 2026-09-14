@@ -617,7 +617,33 @@ class BaleNotificationCoordinator:
             payload=payload,
         )
 
+    def _close_bundle_already_sent(self, trade_date: date) -> bool:
+        start = datetime.combine(trade_date, time.min, tzinfo=self.tz)
+        end = start + timedelta(days=1)
+        try:
+            with self.engine.connect() as conn:
+                sent = conn.execute(
+                    sql_text(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM notification_log
+                            WHERE notification_type = 'MARKET_CLOSE_ACCOUNT_STATUS'
+                              AND status = 'SENT'
+                              AND sent_at >= :start
+                              AND sent_at < :end
+                        )
+                        """
+                    ),
+                    {"start": start, "end": end},
+                ).scalar_one()
+            return bool(sent)
+        except Exception:
+            return False
+
     def send_close_bundle(self, trade_date: date) -> None:
+        if self._close_bundle_already_sent(trade_date):
+            return
         for strategy_id in (STRATEGY_A, STRATEGY_B):
             report = self.accounts.snapshot_report(
                 strategy_id, trade_date=trade_date

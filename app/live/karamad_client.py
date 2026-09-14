@@ -204,6 +204,11 @@ class KaramadClient:
             user_data_dir=self.user_data_dir,
             headless=self.headless,
         )
+        try:
+            self.driver.set_page_load_timeout(25)
+            self.driver.set_script_timeout(25)
+        except Exception:
+            logger.exception("Chrome command timeouts failed")
         self._stealth()
 
     def _stealth(self) -> None:
@@ -246,45 +251,56 @@ class KaramadClient:
         return "dashboard" in url or "premium" in url
 
     def ensure_dashboard(self) -> None:
-        self.start()
-        if self.is_logged_in():
+        try:
+            self.start()
+            if self.is_logged_in():
+                if "premium/stock" not in (self.driver.current_url or "").lower():
+                    self.driver.get(self.dashboard_url)
+                    wait_visible(self.driver, (By.CSS_SELECTOR, "app-premium-stock"), timeout=30)
+                return
+            if not self.login():
+                raise RuntimeError("KARAMAD_LOGIN_FAILED")
+            self.dismiss_modal()
             if "premium/stock" not in (self.driver.current_url or "").lower():
                 self.driver.get(self.dashboard_url)
                 wait_visible(self.driver, (By.CSS_SELECTOR, "app-premium-stock"), timeout=30)
-            return
-        if not self.login():
-            raise RuntimeError("KARAMAD_LOGIN_FAILED")
-        self.dismiss_modal()
-        if "premium/stock" not in (self.driver.current_url or "").lower():
-            self.driver.get(self.dashboard_url)
-            wait_visible(self.driver, (By.CSS_SELECTOR, "app-premium-stock"), timeout=30)
+        except Exception:
+            self.close()
+            raise
 
     def login(self) -> bool:
         self.start()
         driver = self.driver
-        driver.get(self.login_url)
-        time.sleep(random.uniform(2.0, 3.0))
-        username_field = wait_visible(driver, (By.CSS_SELECTOR, "app-login form input"))
-        clear_field(username_field)
-        human_type(username_field, self.username)
-        password_field = wait_visible(driver, (By.CSS_SELECTOR, "app-login lib-virtual-keyboard input"))
-        clear_field(password_field)
-        human_type(password_field, self.password)
-        captcha_text = self.solve_captcha()
-        captcha_input = wait_visible(driver, (By.CSS_SELECTOR, "app-login app-captcha input"))
-        clear_field(captcha_input)
-        human_type(captcha_input, captcha_text)
-        wait_clickable(driver, (By.CSS_SELECTOR, "app-login form button")).click()
         try:
-            WebDriverWait(driver, 25).until(
+            driver.get(self.login_url)
+            time.sleep(random.uniform(2.0, 3.0))
+            username_field = wait_visible(driver, (By.CSS_SELECTOR, "app-login form input"))
+            clear_field(username_field)
+            human_type(username_field, self.username)
+            password_field = wait_visible(driver, (By.CSS_SELECTOR, "app-login lib-virtual-keyboard input"))
+            clear_field(password_field)
+            human_type(password_field, self.password)
+            captcha_text = self.solve_captcha()
+            captcha_input = wait_visible(driver, (By.CSS_SELECTOR, "app-login app-captcha input"))
+            clear_field(captcha_input)
+            human_type(captcha_input, captcha_text)
+            button = wait_clickable(driver, (By.CSS_SELECTOR, "app-login form button"))
+            driver.execute_script("arguments[0].click();", button)
+            WebDriverWait(driver, 20).until(
                 lambda d: "dashboard" in (d.current_url or "").lower()
                 or "premium" in (d.current_url or "").lower()
             )
             return True
-        except TimeoutException:
-            logger.error("Karamad login timeout url=%s", driver.current_url)
-            self.read_notification(timeout=5)
-            self.save_debug("login_failed")
+        except Exception:
+            logger.exception(
+                "Karamad login failed url=%s",
+                getattr(driver, "current_url", "?"),
+            )
+            try:
+                self.read_notification(timeout=3)
+                self.save_debug("login_failed")
+            except Exception:
+                pass
             return False
 
     def solve_captcha(self) -> str:

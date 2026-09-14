@@ -42,9 +42,9 @@ data_sources:
     coin_contract_code: "GoldCoin"
 
 network:
-  timeout_seconds: 15
-  retries: 3
-  retry_backoff_seconds: 1.2
+  timeout_seconds: 8
+  retries: 2
+  retry_backoff_seconds: 0.8
 
 market_data_policy:
   # STRICT: price used by valuation/signals must be executable to BUY now.

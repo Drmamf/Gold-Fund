@@ -4,7 +4,7 @@ import unittest
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from app.scheduler import MarketSchedule
+from app.scheduler import MarketSchedule, TradingScheduler
 
 
 class MarketScheduleTest(unittest.TestCase):
@@ -47,6 +47,29 @@ class MarketScheduleTest(unittest.TestCase):
         for event in events:
             if event.phase == "ACTIVE":
                 self.assertLess(event.scheduled_for.time(), self.schedule.active_end)
+
+    def test_missed_close_after_active_overrun(self):
+        now = datetime(2026, 9, 14, 18, 0, 27, tzinfo=self.tz)
+        missed = self.schedule.missed_close_event(now)
+        self.assertIsNotNone(missed)
+        self.assertEqual(missed.phase, "CLOSE")
+        self.assertEqual(missed.scheduled_for.strftime("%H:%M:%S"), "18:00:00")
+        nxt = self.schedule.next_event_after(now)
+        self.assertNotEqual(nxt.phase, "CLOSE")
+
+    def test_pick_event_runs_overrun_close(self):
+        now = datetime(2026, 9, 14, 18, 0, 27, tzinfo=self.tz)
+        sched = TradingScheduler(self.schedule, pipeline=None, now_fn=lambda: now)
+        event = sched.pick_event(now)
+        self.assertEqual(event.phase, "CLOSE")
+
+    def test_pick_event_skips_close_once_sent(self):
+        now = datetime(2026, 9, 14, 18, 0, 27, tzinfo=self.tz)
+        sched = TradingScheduler(self.schedule, pipeline=None, now_fn=lambda: now)
+        sched._close_sent_on.add(date(2026, 9, 14))
+        event = sched.pick_event(now)
+        self.assertEqual(event.phase, "OPEN_STATUS")
+        self.assertEqual(event.scheduled_for.date(), date(2026, 9, 15))
 
 
 if __name__ == "__main__":
