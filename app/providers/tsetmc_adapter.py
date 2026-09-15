@@ -184,13 +184,19 @@ class TSETMCAdapter:
     def from_config(cls, config: dict[str, Any]) -> "TSETMCAdapter":
         src = config["data_sources"]["tsetmc"]
         net = config.get("network", {})
+        tsetmc_net = net.get("tsetmc") or {}
         return cls(
             price_url=src["price_url"],
             nav_url=src["nav_url"],
             order_book_url=src["order_book_url"],
-            timeout_seconds=net.get("timeout_seconds", 15),
-            retries=net.get("retries", 3),
-            retry_backoff_seconds=net.get("retry_backoff_seconds", 1.2),
+            timeout_seconds=tsetmc_net.get(
+                "timeout_seconds", net.get("timeout_seconds", 15)
+            ),
+            retries=tsetmc_net.get("retries", net.get("retries", 3)),
+            retry_backoff_seconds=tsetmc_net.get(
+                "retry_backoff_seconds",
+                net.get("retry_backoff_seconds", 1.2),
+            ),
         )
 
     def _get_json(

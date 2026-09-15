@@ -539,6 +539,49 @@ class BaleNotificationCoordinator:
             # never hide a real warning if throttle lookup itself fails.
             return False
 
+    def _suppress_repeated_tsetmc_gateway_alert(
+        self,
+        *,
+        source: str,
+        operation: str,
+        error: Exception | str,
+        instrument_symbol: str | None = None,
+    ) -> bool:
+        """TSETMC CDN 502s flap for minutes. Keep data_errors; don't flood Telegram."""
+        if source.upper() != "TSETMC":
+            return False
+        blob = str(error).upper()
+        if "502" not in blob and "BAD GATEWAY" not in blob and "503" not in blob:
+            return False
+        try:
+            with self.engine.connect() as conn:
+                recent_exists = conn.execute(
+                    sql_text("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM notification_log
+                            WHERE notification_type = 'API_ERROR'
+                              AND status = 'SENT'
+                              AND payload->>'source' = :source
+                              AND payload->>'operation' = :operation
+                              AND COALESCE(payload->>'instrument_symbol', '')
+                                  = :instrument_symbol
+                              AND sent_at >= (
+                                  CURRENT_TIMESTAMP
+                                  - INTERVAL '15 minutes'
+                              )
+                        )
+                    """),
+                    {
+                        "source": source,
+                        "operation": operation,
+                        "instrument_symbol": instrument_symbol or "",
+                    },
+                ).scalar_one()
+            return bool(recent_exists)
+        except Exception:
+            return False
+
     def notify_api_error(
         self,
         *,
@@ -553,8 +596,8 @@ class BaleNotificationCoordinator:
     ) -> None:
         when = occurred_at or datetime.now(self.tz)
 
-        # Every logical failed provider call gets its own DataError row
-        # and its own Bale warning. No dedup/suppression is applied.
+        # Every logical failed provider call gets a DataError row.
+        # Telegram/Bale is throttled for repeating TSETMC 502s and stale ounce.
         try:
             with Session(self.engine) as session:
                 with session.begin():
@@ -606,6 +649,24 @@ class BaleNotificationCoordinator:
                 payload={
                     **payload,
                     "suppression_reason": "STALE_OUNCE_30_MIN_COOLDOWN",
+                },
+            )
+            return
+
+        if self._suppress_repeated_tsetmc_gateway_alert(
+            source=source,
+            operation=operation,
+            error=error,
+            instrument_symbol=instrument_symbol,
+        ):
+            self._log(
+                notification_type="API_ERROR",
+                status="SUPPRESSED",
+                text=text,
+                cycle_id=cycle_id,
+                payload={
+                    **payload,
+                    "suppression_reason": "TSETMC_GATEWAY_15_MIN_COOLDOWN",
                 },
             )
             return

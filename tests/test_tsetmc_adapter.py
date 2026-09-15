@@ -24,8 +24,13 @@ class FakeResponse:
 class FakeSession:
     def __init__(self, payloads):
         self.payloads = list(payloads)
+        self.calls = 0
     def get(self, *args, **kwargs):
-        return FakeResponse(self.payloads.pop(0))
+        self.calls += 1
+        item = self.payloads.pop(0)
+        if isinstance(item, FakeResponse):
+            return item
+        return FakeResponse(item)
 
 
 class TSETMCAdapterTest(unittest.TestCase):
@@ -74,6 +79,30 @@ class TSETMCAdapterTest(unittest.TestCase):
             session, self.instrument
         )
         self.assertEqual(nav.nav_redemption, Decimal("12345"))
+
+    def test_tsetmc_network_is_not_capped_to_ime_retries(self):
+        self.assertGreaterEqual(self.adapter.retries, 5)
+
+    def test_price_retries_fast_502_then_succeeds(self):
+        self.adapter.retry_backoff_seconds = 0
+        session = FakeSession([
+            FakeResponse({}, status=502),
+            FakeResponse({}, status=502),
+            FakeResponse({
+                "closingPriceInfo": {
+                    "pDrCotVal": 1000,
+                    "pClosing": 1000,
+                    "qTotCap": 50,
+                    "qTotTran5J": 10,
+                    "zTotTran": 3,
+                    "dEven": 20260915,
+                    "hEven": 123500,
+                }
+            }),
+        ])
+        price = self.adapter.fetch_price_activity(session, self.instrument)
+        self.assertEqual(price.last_price, Decimal("1000"))
+        self.assertEqual(session.calls, 3)
 
     def test_missing_redemption_nav_invalid(self):
         session = FakeSession([{

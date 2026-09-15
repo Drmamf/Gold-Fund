@@ -45,6 +45,12 @@ network:
   timeout_seconds: 8
   retries: 2
   retry_backoff_seconds: 0.8
+  # TSETMC CDN 502s are common and fast. Keep IME at 2 tries so 18:00
+  # close cannot be eaten by hung retries; give TSETMC more short tries.
+  tsetmc:
+    timeout_seconds: 8
+    retries: 5
+    retry_backoff_seconds: 0.5
 
 market_data_policy:
   # STRICT: price used by valuation/signals must be executable to BUY now.
