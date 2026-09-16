@@ -547,7 +547,10 @@ class BaleNotificationCoordinator:
         error: Exception | str,
         instrument_symbol: str | None = None,
     ) -> bool:
-        """TSETMC CDN 502s flap for minutes. Keep data_errors; don't flood Telegram."""
+        """TSETMC CDN 502s flap for minutes. Keep data_errors; don't flood Telegram.
+
+        One SENT card per 15 minutes for the whole CDN, not per fund/endpoint.
+        """
         if source.upper() != "TSETMC":
             return False
         blob = str(error).upper()
@@ -563,20 +566,13 @@ class BaleNotificationCoordinator:
                             WHERE notification_type = 'API_ERROR'
                               AND status = 'SENT'
                               AND payload->>'source' = :source
-                              AND payload->>'operation' = :operation
-                              AND COALESCE(payload->>'instrument_symbol', '')
-                                  = :instrument_symbol
                               AND sent_at >= (
                                   CURRENT_TIMESTAMP
                                   - INTERVAL '15 minutes'
                               )
                         )
                     """),
-                    {
-                        "source": source,
-                        "operation": operation,
-                        "instrument_symbol": instrument_symbol or "",
-                    },
+                    {"source": source},
                 ).scalar_one()
             return bool(recent_exists)
         except Exception:

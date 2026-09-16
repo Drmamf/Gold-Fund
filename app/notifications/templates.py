@@ -154,8 +154,17 @@ def api_error_card(
         f"❌ خطا: {safe_text(error, 700)}",
         SEP,
         "🛑 داده این منبع در این Cycle قابل اتکا نیست.",
-        f"🕒 {occurred_at.strftime('%Y-%m-%d %H:%M:%S')}",
     ])
+    blob = f"{source} {operation} {error}".upper()
+    if "TSETMC" in blob and ("502" in blob or "BAD GATEWAY" in blob or "503" in blob):
+        lines.extend(
+            [
+                "این خطای استراتژی یا کارگزاری نیست.",
+                "سایت CDN بورس (tsetmc) قیمت/NAV/صف را نداد.",
+                "بدون آن عدد سیگنال ساختگی نمی‌زنیم؛ سیکل ۳ دقیقه‌ای بعدی دوباره می‌گیرد.",
+            ]
+        )
+    lines.append(f"🕒 {occurred_at.strftime('%Y-%m-%d %H:%M:%S')}")
     return "\n".join(lines)
 
 
