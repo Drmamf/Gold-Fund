@@ -222,6 +222,13 @@ def _build_notifications(config):
         os.getenv("BALE_ENABLED", "true").strip().lower()
         not in disabled_values
     )
+    strategy_b_notifications_enabled = (
+        os.getenv(
+            "STRATEGY_B_NOTIFICATIONS_ENABLED",
+            "false",
+        ).strip().lower()
+        not in disabled_values
+    )
 
     if telegram_enabled:
         client = TelegramBotClient.from_env()
@@ -245,6 +252,9 @@ def _build_notifications(config):
         channel=channel,
         output_dir=export_path,
         timezone=config.app.get("app", {}).get("timezone", "Asia/Tehran"),
+        strategy_b_notifications_enabled=(
+            strategy_b_notifications_enabled
+        ),
     )
 
 

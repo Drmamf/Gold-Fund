@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Any
+from typing import Any, Sequence
 import zipfile
 from zoneinfo import ZoneInfo
 
@@ -58,7 +58,12 @@ class CSVExporter:
         )
         return start, end
 
-    def export_daily_signals(self, trade_date: date) -> Path:
+    def export_daily_signals(
+        self,
+        trade_date: date,
+        *,
+        strategy_ids: Sequence[str] | None = None,
+    ) -> Path:
         start, end = self._day_bounds(trade_date)
         out = self.output_dir / (
             f"wallex_gold_signals_{trade_date.isoformat()}.csv"
@@ -70,13 +75,17 @@ class CSVExporter:
             ).all()
             symbols = {int(i): s for i, s in instrument_rows}
 
-            signals = session.scalars(
-                select(Signal)
-                .where(
-                    Signal.generated_at >= start,
-                    Signal.generated_at <= end,
+            stmt = select(Signal).where(
+                Signal.generated_at >= start,
+                Signal.generated_at <= end,
+            )
+            if strategy_ids is not None:
+                stmt = stmt.where(
+                    Signal.strategy_id.in_(list(strategy_ids))
                 )
-                .order_by(Signal.generated_at, Signal.id)
+
+            signals = session.scalars(
+                stmt.order_by(Signal.generated_at, Signal.id)
             ).all()
 
             fields = [
@@ -136,16 +145,23 @@ class CSVExporter:
 
         return out
 
-    def daily_signal_counts(self, trade_date: date) -> dict[str, int]:
+    def daily_signal_counts(
+        self,
+        trade_date: date,
+        *,
+        strategy_ids: Sequence[str] | None = None,
+    ) -> dict[str, int]:
         start, end = self._day_bounds(trade_date)
         with Session(self.engine) as session:
-            rows = session.execute(
-                select(Signal.strategy_id)
-                .where(
-                    Signal.generated_at >= start,
-                    Signal.generated_at <= end,
+            stmt = select(Signal.strategy_id).where(
+                Signal.generated_at >= start,
+                Signal.generated_at <= end,
+            )
+            if strategy_ids is not None:
+                stmt = stmt.where(
+                    Signal.strategy_id.in_(list(strategy_ids))
                 )
-            ).all()
+            rows = session.execute(stmt).all()
 
         counts = {STRATEGY_A: 0, STRATEGY_B: 0}
         for (strategy_id,) in rows:

@@ -149,9 +149,30 @@ class AccountReporter:
                 through=snap.captured_at,
             )
 
+            first_snapshot_at = session.scalar(
+                select(func.min(AccountSnapshot.captured_at)).where(
+                    AccountSnapshot.strategy_id == strategy_id,
+                    AccountSnapshot.captured_at <= snap.captured_at,
+                )
+            )
+
+            activity_duration_seconds = 0
+            if first_snapshot_at is not None:
+                activity_duration_seconds = max(
+                    0,
+                    int(
+                        (
+                            snap.captured_at - first_snapshot_at
+                        ).total_seconds()
+                    ),
+                )
+
             report: dict[str, Any] = {
 
                 "exists": True,
+
+                "activity_duration_seconds":
+                    activity_duration_seconds,
 
                 "captured_at": (
                     snap.captured_at

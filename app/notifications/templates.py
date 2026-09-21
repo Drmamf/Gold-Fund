@@ -47,6 +47,23 @@ def num(value: Any, digits: int = 0) -> str:
         return "—"
 
 
+def duration_human(value: Any) -> str:
+    try:
+        total_seconds = max(int(Decimal(str(value))), 0)
+    except Exception:
+        return "—"
+
+    total_minutes = total_seconds // 60
+    days, remainder = divmod(total_minutes, 24 * 60)
+    hours, minutes = divmod(remainder, 60)
+
+    if days:
+        return f"{days} روز و {hours} ساعت"
+    if hours:
+        return f"{hours} ساعت و {minutes} دقیقه"
+    return f"{minutes} دقیقه"
+
+
 def safe_text(value: Any, limit: int = 500) -> str:
     text = str(value or "—")
     for ch in ("*", "_", "[", "]", "`"):
@@ -95,6 +112,7 @@ def open_account_card(strategy_id: str, report: Mapping[str, Any]) -> str:
     if strategy_id == "RELATIVE_BUY_HOLD":
         base.extend([
             f"🏷 صندوق فعلی: ** {safe_text(report.get('current_fund'))} ** ",
+            f"⏱ مدت فعالیت حساب فرضی: ** {duration_human(report.get('activity_duration_seconds'))} ** ",
             f"🔢 تعداد واحد: {num(report.get('units'))}",
             f"💵 وجه نقد: {money(report.get('cash'))}",
             f"🔁 تعداد سوییچ‌ها: {report.get('rotations_count', 0)}",
@@ -115,20 +133,30 @@ def open_account_card(strategy_id: str, report: Mapping[str, Any]) -> str:
     return "\n".join(base)
 
 
-def operational_start_card(at: datetime) -> str:
-    return "\n".join([
+def operational_start_card(
+    at: datetime,
+    *,
+    strategy_b_notifications_enabled: bool = True,
+) -> str:
+    lines = [
         "🟢  ** شروع تایم کاری و محاسبات | 12:05 ** ",
         SEP,
         "⚙️ موتور مشترک بازار فعال شد.",
         "🧮 Valuation و Relative Value در حال پایش هستند.",
         "🔵 Strategy A: عیار پایه + سوییچ نسبی",
-        "🟡 Strategy B: صندوق‌های طلا",
+    ]
+
+    if strategy_b_notifications_enabled:
+        lines.append("🟡 Strategy B: صندوق‌های طلا")
+
+    lines.extend([
         "",
         "📡 از این لحظه تا 17:59 فقط ** سیگنال‌های جدید ** گزارش می‌شوند.",
         "📊 در ساعت 18:00 گزارش پایان تایم معاملات ارسال خواهد شد.",
         SEP,
         f"🕒 {at.strftime('%Y-%m-%d %H:%M:%S')}",
     ])
+    return "\n".join(lines)
 
 
 def api_error_card(
@@ -339,6 +367,7 @@ def close_account_card(
     if strategy_id == "RELATIVE_BUY_HOLD":
         lines.extend([
             f"🏷 صندوق فعلی: ** {safe_text(report.get('current_fund'))} ** ",
+            f"⏱ مدت فعالیت حساب فرضی: ** {duration_human(report.get('activity_duration_seconds'))} ** ",
             f"🔢 تعداد واحد: {num(report.get('units'))}",
             f"🔁 کل سوییچ‌ها: {report.get('rotations_count', 0)}",
             f"📨 سیگنال‌های امروز: {report.get('signals_today', 0)}",
@@ -369,17 +398,26 @@ def signals_file_caption(
     date_text: str,
     count_a: int,
     count_b: int,
+    include_strategy_b: bool = True,
 ) -> str:
-    return "\n".join([
+    lines = [
         "📎  ** فایل سیگنال‌های روز ** ",
         SEP,
         f"🗓 تاریخ: {date_text}",
         f"🔵 Strategy A: {count_a} سیگنال",
-        f"🟡 Strategy B: {count_b} سیگنال",
-        f"📨 مجموع: ** {count_a + count_b} ** ",
+    ]
+
+    total = count_a
+    if include_strategy_b:
+        lines.append(f"🟡 Strategy B: {count_b} سیگنال")
+        total += count_b
+
+    lines.extend([
+        f"📨 مجموع: ** {total} ** ",
         "",
-        "فایل شامل همه Signalهاست؛ چه اجرا شده باشند چه نشده باشند.",
+        "فایل شامل همه Signalهای ارسالی است؛ چه اجرا شده باشند چه نشده باشند.",
     ])
+    return "\n".join(lines)
 
 
 def backup_caption(

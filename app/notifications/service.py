@@ -39,11 +39,15 @@ class BaleNotificationCoordinator:
         channel: str = "BALE",
         output_dir: str | Path = "./output/exports",
         timezone: str = "Asia/Tehran",
+        strategy_b_notifications_enabled: bool = True,
     ):
         self.engine = engine
         self.client = client
         self.channel = channel.strip().upper()
         self.tz = ZoneInfo(timezone)
+        self.strategy_b_notifications_enabled = (
+            strategy_b_notifications_enabled
+        )
         self.accounts = AccountReporter(engine, timezone=timezone)
         self.exporter = CSVExporter(
             engine,
@@ -171,7 +175,11 @@ class BaleNotificationCoordinator:
         start_today = datetime.combine(
             trade_date, time.min, tzinfo=self.tz
         )
-        for strategy_id in (STRATEGY_A, STRATEGY_B):
+        strategy_ids = [STRATEGY_A]
+        if getattr(self, "strategy_b_notifications_enabled", True):
+            strategy_ids.append(STRATEGY_B)
+
+        for strategy_id in strategy_ids:
             report = self.accounts.snapshot_report(
                 strategy_id, before=start_today
             )
@@ -183,7 +191,12 @@ class BaleNotificationCoordinator:
 
     def send_operational_start(self, at: datetime) -> None:
         self.send_text(
-            templates.operational_start_card(at),
+            templates.operational_start_card(
+                at,
+                strategy_b_notifications_enabled=(
+                    getattr(self, "strategy_b_notifications_enabled", True)
+                ),
+            ),
             notification_type="OPERATIONAL_START",
         )
 
@@ -371,6 +384,20 @@ class BaleNotificationCoordinator:
             for signal in raw_signals or persisted_signals:
                 effective_strategy_id = signal.strategy_id
                 break
+
+        if not getattr(self, "strategy_b_notifications_enabled", True):
+            if effective_strategy_id == STRATEGY_B:
+                return
+            persisted_signals = [
+                signal
+                for signal in persisted_signals
+                if signal.strategy_id != STRATEGY_B
+            ]
+            raw_signals = [
+                signal
+                for signal in raw_signals
+                if signal.strategy_id != STRATEGY_B
+            ]
 
         rotation_signals_to_notify: list[StrategySignal] = []
         current_rotation_keys: set[str] = set()
@@ -701,7 +728,11 @@ class BaleNotificationCoordinator:
     def send_close_bundle(self, trade_date: date) -> None:
         if self._close_bundle_already_sent(trade_date):
             return
-        for strategy_id in (STRATEGY_A, STRATEGY_B):
+        strategy_ids = [STRATEGY_A]
+        if getattr(self, "strategy_b_notifications_enabled", True):
+            strategy_ids.append(STRATEGY_B)
+
+        for strategy_id in strategy_ids:
             report = self.accounts.snapshot_report(
                 strategy_id, trade_date=trade_date
             )
@@ -713,12 +744,21 @@ class BaleNotificationCoordinator:
                 strategy_id=strategy_id,
             )
 
-        path = self.exporter.export_daily_signals(trade_date)
-        counts = self.exporter.daily_signal_counts(trade_date)
+        path = self.exporter.export_daily_signals(
+            trade_date,
+            strategy_ids=strategy_ids,
+        )
+        counts = self.exporter.daily_signal_counts(
+            trade_date,
+            strategy_ids=strategy_ids,
+        )
         caption = templates.signals_file_caption(
             date_text=trade_date.isoformat(),
             count_a=counts.get(STRATEGY_A, 0),
             count_b=counts.get(STRATEGY_B, 0),
+            include_strategy_b=(
+                getattr(self, "strategy_b_notifications_enabled", True)
+            ),
         )
         self.send_file(
             path,
