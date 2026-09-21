@@ -10,7 +10,7 @@ from typing import Optional
 
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -274,6 +274,9 @@ class KaramadClient:
         try:
             driver.get(self.login_url)
             time.sleep(random.uniform(2.0, 3.0))
+            if self.is_logged_in():
+                logger.info("Karamad session still valid, skip login form")
+                return True
             username_field = wait_visible(driver, (By.CSS_SELECTOR, "app-login form input"))
             clear_field(username_field)
             human_type(username_field, self.username)
@@ -382,6 +385,18 @@ class KaramadClient:
         return " | ".join(labels)
 
     def select_symbol(self, symbol: str):
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                self._select_symbol_once(symbol)
+                return
+            except StaleElementReferenceException as exc:
+                last_exc = exc
+                logger.warning("select_symbol stale attempt=%s symbol=%s", attempt + 1, symbol)
+                time.sleep(0.6)
+        raise RuntimeError(f"select_symbol stale for {symbol}") from last_exc
+
+    def _select_symbol_once(self, symbol: str):
         driver = self.driver
         try:
             driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
@@ -408,14 +423,29 @@ class KaramadClient:
             "[id^='ngb-typeahead-'] button",
             "[id^='ngb-typeahead-']",
         ):
-            options = [o for o in driver.find_elements(By.CSS_SELECTOR, sel) if o.is_displayed()]
-            if options:
+            found = []
+            for o in driver.find_elements(By.CSS_SELECTOR, sel):
+                try:
+                    if o.is_displayed():
+                        found.append(o)
+                except StaleElementReferenceException:
+                    continue
+            if found:
+                options = found
                 break
-        texts = [(o.text or "").strip() for o in options]
+        texts = []
+        for o in options:
+            try:
+                texts.append((o.text or "").strip())
+            except StaleElementReferenceException:
+                texts.append("")
         chosen = None
         chosen_text = ""
         for o in options:
-            txt = (o.text or "").strip()
+            try:
+                txt = (o.text or "").strip()
+            except StaleElementReferenceException:
+                continue
             if "\n" in txt:
                 continue
             first = txt.split()[0] if txt else ""
@@ -440,22 +470,42 @@ class KaramadClient:
         logger.info("order panel ok symbol=%s clicked=%s", symbol, chosen_text)
 
     def read_threshold_prices(self) -> tuple[int, int]:
+        body = ""
+        try:
+            body = self.driver.find_element(By.TAG_NAME, "body").text or ""
+        except Exception:
+            body = ""
+        compact = re.sub(r"\s+", " ", body)
+        m = re.search(
+            r"آستانه قیمت[^\d۰-۹]{0,12}([\d٬,]+)[^\d۰-۹]{1,12}([\d٬,]+)",
+            compact,
+        )
+        if m:
+            a, b = parse_int(m.group(1)), parse_int(m.group(2))
+            if a and b and min(a, b) >= 1000:
+                high, low = max(a, b), min(a, b)
+                logger.info("آستانه قیمت high=%s low=%s", high, low)
+                return high, low
         el = wait_visible(self.driver, (By.CSS_SELECTOR, "lib-range-indicator"), timeout=15)
         raw = el.text.strip() or (el.get_attribute("textContent") or "")
         nums = [parse_int(m.group(0)) for m in _NUM_RE.finditer(raw)]
-        nums = [n for n in nums if n is not None]
+        nums = [n for n in nums if n is not None and n >= 1000]
         if len(nums) < 2:
             raise ValueError(f"آستانه خوانا نیست: {raw!r}")
         low, high = min(nums[0], nums[1]), max(nums[0], nums[1])
+        logger.info("آستانه fallback high=%s low=%s raw=%r", high, low, raw[:80])
         return high, low
 
     def clamp_price(self, price: int) -> int:
         high, low = self.read_threshold_prices()
+        clamped = price
         if price < low:
-            return low
-        if price > high:
-            return high
-        return price
+            clamped = low
+        elif price > high:
+            clamped = high
+        if clamped != price:
+            logger.warning("clamp_price %s -> %s (low=%s high=%s)", price, clamped, low, high)
+        return clamped
 
     def fill_order_panel(self, price: int, quantity: int):
         driver = self.driver
@@ -526,13 +576,72 @@ class KaramadClient:
     def read_sellable_qty(self) -> Optional[int]:
         panel = wait_visible(self.driver, (By.CSS_SELECTOR, "app-dashboard-common-order-panel"), timeout=10)
         raw = panel.text or ""
+        found_any = False
         for label in ("قابل فروش", "موجودی", "مانده"):
             m = re.search(re.escape(label) + r"[^\d۰-۹]{0,12}([\d٬,]+)", raw)
             if m:
+                found_any = True
                 value = parse_int(m.group(1))
-                if value is not None and value > 0:
+                if value is not None:
                     return value
-        return None
+        return 0 if found_any else None
+
+    def read_holdings_qty(self) -> Optional[int]:
+        """Units of the selected symbol from اطلاعات تکمیلی (دارایی), not the order-panel قابل فروش."""
+        try:
+            raw = self.driver.find_element(By.TAG_NAME, "body").text or ""
+        except Exception:
+            return None
+        compact = re.sub(r"\s+", " ", raw)
+        m = re.search(r"آستانه تعداد[^\d]{0,40}دارایی\s+([\d٬,]+)", compact)
+        if not m:
+            m = re.search(r"دارایی\s+([\d٬,]+)\s+زمان اعلام", compact)
+        if not m:
+            return None
+        return parse_int(m.group(1))
+
+    def _panel_is_symbol(self, symbol: str) -> bool:
+        label = self.order_side_label("buy") or self.order_side_label("sell")
+        return bool(label) and symbol in label
+
+    def wait_until_sold(self, symbol: str, *, timeout: float = 90.0) -> bool:
+        """True when قابل فروش is gone — toast «ارسال شد / هسته» is not a fill."""
+        deadline = time.time() + timeout
+        last: Optional[int] = None
+        while time.time() < deadline:
+            try:
+                if not self._panel_is_symbol(symbol):
+                    self.select_symbol(symbol)
+                qty = self.read_sellable_qty()
+                held = self.read_holdings_qty()
+                last = qty if qty is not None else held
+                logger.info("wait_until_sold %s sellable=%s holdings=%s", symbol, qty, held)
+                if qty == 0 or held == 0:
+                    return True
+            except Exception:
+                logger.exception("wait_until_sold poll failed symbol=%s", symbol)
+            time.sleep(3)
+        logger.warning("wait_until_sold timeout symbol=%s last=%s", symbol, last)
+        return False
+
+    def wait_until_bought(self, symbol: str, *, min_qty: int, timeout: float = 90.0) -> Optional[int]:
+        deadline = time.time() + timeout
+        last: Optional[int] = None
+        need = max(1, int(min_qty))
+        while time.time() < deadline:
+            try:
+                if not self._panel_is_symbol(symbol):
+                    self.select_symbol(symbol)
+                qty = self.read_sellable_qty() or 0
+                held = self.read_holdings_qty() or 0
+                last = max(qty, held)
+                logger.info("wait_until_bought %s sellable=%s holdings=%s need>=%s", symbol, qty, held, need)
+                if last >= need:
+                    return last
+            except Exception:
+                logger.exception("wait_until_bought poll failed symbol=%s", symbol)
+            time.sleep(3)
+        return last
 
     def read_notification(self, timeout=8) -> Optional[str]:
         try:

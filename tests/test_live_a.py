@@ -3,11 +3,13 @@ from __future__ import annotations
 from decimal import Decimal
 import unittest
 
-from app.live.policy import FAIL_WORDS, OK_WORDS, notification_ok
+from app.live.policy import FAIL_WORDS, OK_WORDS, notification_ok, order_only_queued, order_rejected
 from app.live.sizing import (
     is_whitelisted,
     live_buy_budget_rial,
+    meets_etf_min_notional,
     qty_for_budget,
+    rotation_buy_budget_rial,
     toman_to_rial,
 )
 
@@ -66,6 +68,45 @@ class LiveNotificationTests(unittest.TestCase):
         self.assertEqual(code, "NO_BROKER_NOTIFICATION")
         self.assertTrue(any("موفق" in w for w in OK_WORDS))
         self.assertTrue(any("خطا" in w for w in FAIL_WORDS))
+
+    def test_queued_core_toast_is_not_a_fill(self):
+        toast = (
+            "گوهر - ثبت سفارش در هسته\n"
+            "سفارش با موفقیت ارسال شد.\n"
+            "گوهر - در حال ارسال سفارش"
+        )
+        self.assertTrue(order_only_queued(toast))
+        self.assertFalse(order_rejected(toast))
+
+    def test_etf_min_notional_rejects_crumb_tickets(self):
+        self.assertFalse(meets_etf_min_notional(qty=1, price_rial=200_000))
+        self.assertTrue(meets_etf_min_notional(qty=5, price_rial=200_000))
+        self.assertTrue(meets_etf_min_notional(qty=44, price_rial=1_126_501))
+
+    def test_rotation_budget_does_not_spend_the_rest_of_the_account(self):
+        sleeve = Decimal("50467956")
+        budget = rotation_buy_budget_rial(
+            buying_power_rial=117_935_544,
+            sell_notional_rial=sleeve,
+        )
+        self.assertEqual(budget, sleeve)
+        crumbs = rotation_buy_budget_rial(
+            buying_power_rial=252_056,
+            sell_notional_rial=sleeve,
+        )
+        self.assertEqual(crumbs, Decimal("252056"))
+        self.assertFalse(
+            meets_etf_min_notional(
+                qty=qty_for_budget(budget_rial=crumbs, price_rial=202_455),
+                price_rial=202_455,
+            )
+        )
+
+    def test_min_value_toast_is_rejected(self):
+        text = "حداقل ارزش سفارش برای صندوق‌های سرمایه‌گذاری قابل معامله 1,000,000 ریال است"
+        ok, _ = notification_ok(text)
+        self.assertFalse(ok)
+        self.assertTrue(order_rejected(text))
 
 
 if __name__ == "__main__":

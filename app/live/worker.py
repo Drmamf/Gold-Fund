@@ -13,8 +13,15 @@ from dotenv import load_dotenv
 
 from app.database import Base, SessionLocal, engine
 from app.live.karamad_client import KaramadClient
-from app.live.policy import notification_ok
-from app.live.sizing import is_whitelisted, live_buy_budget_rial, qty_for_budget, toman_to_rial
+from app.live.policy import notification_ok, order_rejected
+from app.live.sizing import (
+    is_whitelisted,
+    live_buy_budget_rial,
+    meets_etf_min_notional,
+    qty_for_budget,
+    rotation_buy_budget_rial,
+    toman_to_rial,
+)
 from app.live.notify import notify_ops
 from app.live.store import LiveStore
 from app.scheduler import MarketSchedule
@@ -315,14 +322,22 @@ class LiveStrategyAWorker:
                 self.store.update_order(order_id, status="SKIPPED", error_message="NO_LIVE_UNITS")
                 return
 
+            sell_price = int(Decimal(str(source_bid)))
+            buy_price = int(Decimal(str(target_ask)))
+            sell_notional = Decimal(units) * Decimal(sell_price)
             sell_label, sell_notif = self.client.place_limit(
                 symbol=source_symbol,
                 side="sell",
-                price=int(Decimal(str(source_bid))),
+                price=sell_price,
                 quantity=units,
                 actually_click=not self.dry_run,
             )
-            sell_ok, sell_reason = (True, "DRY_RUN") if self.dry_run else notification_ok(sell_notif)
+            if self.dry_run:
+                sell_ok, sell_reason = True, "DRY_RUN"
+            elif order_rejected(sell_notif):
+                sell_ok, sell_reason = False, sell_notif or "SELL_REJECTED"
+            else:
+                sell_ok, sell_reason = True, sell_notif or "WAITING_FILL"
             if not sell_ok:
                 self.store.update_order(
                     order_id,
@@ -336,15 +351,41 @@ class LiveStrategyAWorker:
                 return
 
             if not self.dry_run:
+                sold = self.client.wait_until_sold(source_symbol, timeout=90)
+                if not sold:
+                    self.store.update_order(
+                        order_id,
+                        status="FAILED",
+                        broker_notification=sell_notif,
+                        error_message="SELL_NOT_FILLED",
+                        details={"sell_button": sell_label, "held_symbol": source_symbol, "held_units": units},
+                    )
+                    self.client.save_debug(f"sell_not_filled_{signal_id}")
+                    notify_ops(
+                        f"Live A فروش {source_symbol} به هسته رفت ولی پر نشد. "
+                        f"هلدینگ {units} واحد سر جایش ماند؛ خریدی زده نشد."
+                    )
+                    return
                 self.store.set_state(current_symbol=None, current_units=Decimal("0"))
 
             balances = self.client.read_balances()
             power = int(balances.get("قدرت خرید سهام") or 0)
-            buy_qty = qty_for_budget(budget_rial=power, price_rial=int(Decimal(str(target_ask))))
-            if buy_qty <= 0:
+            budget = rotation_buy_budget_rial(
+                buying_power_rial=power, sell_notional_rial=sell_notional
+            )
+            buy_qty = qty_for_budget(budget_rial=budget, price_rial=buy_price)
+            if not self.dry_run and not meets_etf_min_notional(qty=buy_qty, price_rial=buy_price):
+                time.sleep(5)
+                balances = self.client.read_balances()
+                power = int(balances.get("قدرت خرید سهام") or 0)
+                budget = rotation_buy_budget_rial(
+                    buying_power_rial=power, sell_notional_rial=sell_notional
+                )
+                buy_qty = qty_for_budget(budget_rial=budget, price_rial=buy_price)
+            if buy_qty <= 0 or not meets_etf_min_notional(qty=buy_qty, price_rial=buy_price):
                 self.store.set_state(
                     frozen=True,
-                    freeze_reason="SELL_OK_BUY_QTY_ZERO",
+                    freeze_reason="SELL_OK_BUY_BELOW_ETF_MIN",
                     current_symbol=None,
                     current_units=Decimal("0"),
                 )
@@ -352,19 +393,33 @@ class LiveStrategyAWorker:
                     order_id,
                     status="PARTIAL",
                     broker_notification=sell_notif,
-                    error_message="BUY_QTY_ZERO_AFTER_SELL",
+                    error_message="BUY_BELOW_ETF_MIN_AFTER_SELL",
+                    details={"power": power, "budget": str(budget), "buy_price": buy_price},
                 )
-                notify_ops("Live A فروش شد ولی قدرت خرید برای مقصد کافی نیست. حساب فریز شد.")
+                notify_ops(
+                    "Live A فروش پر شد ولی بودجه خرید زیر کف ۱ میلیون ریال صندوق ماند. حساب فریز شد."
+                )
                 return
 
             buy_label, buy_notif = self.client.place_limit(
                 symbol=target_symbol,
                 side="buy",
-                price=int(Decimal(str(target_ask))),
+                price=buy_price,
                 quantity=int(buy_qty),
                 actually_click=not self.dry_run,
             )
-            buy_ok, buy_reason = (True, "DRY_RUN") if self.dry_run else notification_ok(buy_notif)
+            if self.dry_run:
+                buy_ok, buy_reason = True, "DRY_RUN"
+            elif order_rejected(buy_notif):
+                buy_ok, buy_reason = False, buy_notif or "BUY_REJECTED"
+            else:
+                filled_qty = self.client.wait_until_bought(
+                    target_symbol, min_qty=max(1, int(buy_qty * Decimal("0.9"))), timeout=90
+                )
+                buy_ok = filled_qty is not None and int(filled_qty) > 0
+                buy_reason = buy_notif or ("BOUGHT" if buy_ok else "BUY_NOT_FILLED")
+                if buy_ok and filled_qty:
+                    buy_qty = Decimal(int(filled_qty))
             if not buy_ok:
                 self.store.set_state(
                     frozen=True,
