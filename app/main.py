@@ -230,13 +230,19 @@ def _build_notifications(config):
         not in disabled_values
     )
 
+    clients = []
+
     if telegram_enabled:
-        client = TelegramBotClient.from_env()
-        channel = "TELEGRAM"
-    elif bale_enabled:
-        client = BaleBotClient.from_env()
-        channel = "BALE"
-    else:
+        clients.append(
+            ("TELEGRAM", TelegramBotClient.from_env())
+        )
+
+    if bale_enabled:
+        clients.append(
+            ("BALE", BaleBotClient.from_env())
+        )
+
+    if not clients:
         return None
 
     export_dir = config.app.get("paths", {}).get(
@@ -248,8 +254,7 @@ def _build_notifications(config):
 
     return BaleNotificationCoordinator(
         engine=engine,
-        client=client,
-        channel=channel,
+        clients=clients,
         output_dir=export_path,
         timezone=config.app.get("app", {}).get("timezone", "Asia/Tehran"),
         strategy_b_notifications_enabled=(

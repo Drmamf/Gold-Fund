@@ -35,15 +35,36 @@ class BaleNotificationCoordinator:
         self,
         *,
         engine: Engine,
-        client: BaleBotClient,
+        client: BaleBotClient | None = None,
+        clients: Sequence[tuple[str, Any]] | None = None,
         channel: str = "BALE",
         output_dir: str | Path = "./output/exports",
         timezone: str = "Asia/Tehran",
         strategy_b_notifications_enabled: bool = True,
     ):
         self.engine = engine
-        self.client = client
-        self.channel = channel.strip().upper()
+
+        destinations: list[tuple[str, Any]] = []
+
+        if clients:
+            for name, destination_client in clients:
+                if destination_client is not None:
+                    destinations.append(
+                        (
+                            str(name).strip().upper(),
+                            destination_client,
+                        )
+                    )
+        elif client is not None:
+            destinations.append(
+                (channel.strip().upper(), client)
+            )
+
+        if not destinations:
+            raise ValueError("At least one notification client is required.")
+
+        self.destinations = tuple(destinations)
+        self.channel, self.client = self.destinations[0]
         self.tz = ZoneInfo(timezone)
         self.strategy_b_notifications_enabled = (
             strategy_b_notifications_enabled
@@ -66,6 +87,8 @@ class BaleNotificationCoordinator:
         provider_message_id: str | None = None,
         error_message: str | None = None,
         payload: dict[str, Any] | None = None,
+        channel: str | None = None,
+        recipient: str | None = None,
     ) -> None:
         try:
             with Session(self.engine) as session:
@@ -74,9 +97,9 @@ class BaleNotificationCoordinator:
                         NotificationLog(
                             cycle_id=cycle_id,
                             strategy_id=strategy_id,
-                            channel=self.channel,
+                            channel=(channel or self.channel).strip().upper(),
                             notification_type=notification_type,
-                            recipient=self.client.config.chat_id,
+                            recipient=(recipient or self.client.config.chat_id),
                             message_hash=hashlib.sha256(
                                 text.encode("utf-8")
                             ).hexdigest() if text else None,
@@ -107,29 +130,37 @@ class BaleNotificationCoordinator:
         strategy_id: str | None = None,
         payload: dict[str, Any] | None = None,
     ) -> bool:
-        try:
-            response = self.client.send_message(text)
-            self._log(
-                notification_type=notification_type,
-                status="SENT",
-                text=text,
-                cycle_id=cycle_id,
-                strategy_id=strategy_id,
-                provider_message_id=self._message_id(response),
-                payload=payload,
-            )
-            return True
-        except Exception as exc:
-            self._log(
-                notification_type=notification_type,
-                status="FAILED",
-                text=text,
-                cycle_id=cycle_id,
-                strategy_id=strategy_id,
-                error_message=str(exc),
-                payload=payload,
-            )
-            return False
+        sent_any = False
+
+        for channel, client in self.destinations:
+            try:
+                response = client.send_message(text)
+                self._log(
+                    notification_type=notification_type,
+                    status="SENT",
+                    text=text,
+                    cycle_id=cycle_id,
+                    strategy_id=strategy_id,
+                    provider_message_id=self._message_id(response),
+                    payload=payload,
+                    channel=channel,
+                    recipient=client.config.chat_id,
+                )
+                sent_any = True
+            except Exception as exc:
+                self._log(
+                    notification_type=notification_type,
+                    status="FAILED",
+                    text=text,
+                    cycle_id=cycle_id,
+                    strategy_id=strategy_id,
+                    error_message=str(exc),
+                    payload=payload,
+                    channel=channel,
+                    recipient=client.config.chat_id,
+                )
+
+        return sent_any
 
     def send_file(
         self,
@@ -139,29 +170,37 @@ class BaleNotificationCoordinator:
         notification_type: str,
         strategy_id: str | None = None,
     ) -> bool:
-        try:
-            response = self.client.send_document(
-                path, caption=caption
-            )
-            self._log(
-                notification_type=notification_type,
-                status="SENT",
-                text=caption,
-                strategy_id=strategy_id,
-                provider_message_id=self._message_id(response),
-                payload={"file": str(path)},
-            )
-            return True
-        except Exception as exc:
-            self._log(
-                notification_type=notification_type,
-                status="FAILED",
-                text=caption,
-                strategy_id=strategy_id,
-                error_message=str(exc),
-                payload={"file": str(path)},
-            )
-            return False
+        sent_any = False
+
+        for channel, client in self.destinations:
+            try:
+                response = client.send_document(
+                    path, caption=caption
+                )
+                self._log(
+                    notification_type=notification_type,
+                    status="SENT",
+                    text=caption,
+                    strategy_id=strategy_id,
+                    provider_message_id=self._message_id(response),
+                    payload={"file": str(path)},
+                    channel=channel,
+                    recipient=client.config.chat_id,
+                )
+                sent_any = True
+            except Exception as exc:
+                self._log(
+                    notification_type=notification_type,
+                    status="FAILED",
+                    text=caption,
+                    strategy_id=strategy_id,
+                    error_message=str(exc),
+                    payload={"file": str(path)},
+                    channel=channel,
+                    recipient=client.config.chat_id,
+                )
+
+        return sent_any
 
 
     def send_asset_composition_reminder(self, item: Mapping[str, Any]) -> bool:
